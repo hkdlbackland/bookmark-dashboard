@@ -328,12 +328,19 @@ function App(){
   useEffect(()=>{const mm=()=>{if(!cardMoved.current){cardMoved.current=true;clearTimeout(cardTmr.current);}};window.addEventListener('mousemove',mm);return()=>window.removeEventListener('mousemove',mm);},[]);
   const onCardMU=(ev)=>{clearTimeout(cardTmr.current);cardTmr.current=null;if(cardTriggered.current)return;if(!cardMoved.current){doCopy(ev);}};
 
+  /* ── FIX: edit 用 delete+add 代替 updateSchedule ── */
   const saveEv=()=>{if(!eName.trim()||!sel.length||busy.current)return;busy.current=true;
     const nm=eName.trim(),ds=[...sel],st=sTime,et=eTime;
     if(editId){
-      setEvents(p=>p.map(e=>e.id===editId?{...e,name:nm,dates:ds,st,et}:e));
+      const oldId=editId;
+      setEvents(p=>p.map(e=>e.id===oldId?{...e,name:nm,dates:ds,st,et}:e));
       resetF();sToast('已更新');
-      apiPost({action:'updateSchedule',id:editId,name:nm,dates:ds,st,et}).then(()=>{busy.current=false;}).catch(()=>{busy.current=false;sToast('同步失敗');loadData();});
+      apiPost({action:'deleteSchedule',id:oldId}).then(()=>{
+        return apiPost({action:'addSchedule',name:nm,dates:ds,st,et});
+      }).then(res=>{
+        busy.current=false;
+        if(res?.id)setEvents(p=>p.map(e=>e.id===oldId?{...e,id:res.id}:e));
+      }).catch(()=>{busy.current=false;sToast('同步失敗');loadData();});
     }else{
       const tmpId='ts-'+Date.now();
       setEvents(p=>[...p,{id:tmpId,name:nm,dates:ds,st,et}]);
@@ -462,7 +469,6 @@ function App(){
     </div></SwipeDel>);
   };
 
-  /* ── Schedule card (UPDATED LAYOUT) ── */
   const renderSchedCard=(ev,isComp)=>{
     const gs=groupC(ev.dates),tl=gTL(ev),tag=getSchedTag(ev.dates),isCp=copiedId===ev.id,isHold=holdingId===ev.id;
     return(<SwipeDel key={ev.id} onDel={()=>delEv(ev.id)} rcls="rounded-2xl" bg="bg-gray-900">
@@ -473,7 +479,6 @@ function App(){
           +(isCp?'border-green-600 ':isHold?'border-purple-500 card-hold ':isComp?'border-gray-800/50 ':'border-gray-800 ')
           +(isComp?'opacity-50 ':'')}>
         <div className="p-4">
-          {/* Row 1: Name + Tag */}
           <div className="flex items-start justify-between mb-2">
             <div className="flex items-center gap-2 flex-1 min-w-0 flex-wrap">
               <h3 className={'font-semibold '+(isComp?'line-through text-gray-500':'')}>{ev.name}</h3>
@@ -484,8 +489,6 @@ function App(){
               {isHold&&<span className="text-xs text-purple-400 flex items-center gap-1"><Ic name="pencil" className="w-3.5 h-3.5"/>修改中…</span>}
             </div>
           </div>
-
-          {/* Row 2: 共X日 + time (left) | date boxes (right) */}
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs text-purple-400">共{ev.dates.length}日</span>
@@ -498,8 +501,6 @@ function App(){
               })}
             </div>
           </div>
-
-          {/* Date groups */}
           <div className="space-y-2">{gs.map((g,gi)=><div key={gi}>{g.length>1?
             <div className="flex items-center gap-2 bg-purple-900/30 rounded-xl px-3 py-2"><div className="w-2 h-2 rounded-full bg-purple-400"/><span className="text-sm text-purple-200">{sd(g[0])} → {sd(g[g.length-1])}</span><span className="text-xs text-purple-400 ml-auto">連續{g.length}日</span></div>:
             <div className="flex items-center gap-2 bg-gray-800 rounded-xl px-3 py-2"><div className="w-2 h-2 rounded-full bg-amber-400"/><span className="text-sm text-gray-200">{dd(g[0])}</span><span className="text-xs text-amber-400 ml-auto">單日</span></div>}</div>)}</div>
