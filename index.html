@@ -244,6 +244,19 @@ function App(){
   const busy=useRef(false);
   useEffect(()=>{selRef.current=sel;},[sel]);
 
+  /* ── 統一長按 0.7s 手勢 ── */
+  const lpRef=useRef({tmr:null,moved:false,triggered:false});
+  const lpStart=useCallback((id,editFn)=>{
+    const r=lpRef.current;r.moved=false;r.triggered=false;clearTimeout(r.tmr);
+    r.tmr=setTimeout(()=>{r.triggered=true;vib([40,30,40]);setHoldingId(id);
+      setTimeout(()=>{setHoldingId(null);editFn();},400);
+    },700);
+  },[]);
+  const lpMove=useCallback(()=>{const r=lpRef.current;if(!r.moved){r.moved=true;clearTimeout(r.tmr);r.tmr=null;}},[]);
+  const lpEndTap=useCallback((tapFn)=>{const r=lpRef.current;clearTimeout(r.tmr);r.tmr=null;if(r.triggered)return;if(!r.moved&&tapFn)tapFn();},[]);
+  const lpEnd=useCallback(()=>{clearTimeout(lpRef.current.tmr);lpRef.current.tmr=null;},[]);
+  useEffect(()=>{const mm=()=>lpMove();window.addEventListener('mousemove',mm);return()=>window.removeEventListener('mousemove',mm);},[lpMove]);
+
   const[tick,setTick]=useState(0);
   useEffect(()=>{const iv=setInterval(()=>setTick(t=>t+1),60000);return()=>clearInterval(iv);},[]);
   const sToast=msg=>{setToast(msg);setTimeout(()=>setToast(''),2000);};
@@ -318,15 +331,8 @@ function App(){
     window.addEventListener('mousemove',mm);window.addEventListener('mouseup',mu);return()=>{window.removeEventListener('mousemove',mm);window.removeEventListener('mouseup',mu);};
   },[toggleDate]);
 
-  const cardTmr=useRef(null);const cardMoved=useRef(false);const cardTriggered=useRef(false);
   const doCopy=ev=>{const t=bCopy(ev);try{navigator.clipboard?.writeText(t);}catch(e){}vib();setCopiedId(ev.id);sToast('已複製！');setTimeout(()=>setCopiedId(null),1500);};
   const startEdit=ev=>{setEditId(ev.id);setEName(ev.name);setSel([...ev.dates]);setSTime(ev.st||'');setETime(ev.et||'');setShowForm(true);if(ev.dates.length>0){const d=pd(ev.dates[0]);setVMo(new Date(d.getFullYear(),d.getMonth(),1));}setTimeout(()=>formRef.current?.scrollIntoView({behavior:'smooth',block:'start'}),150);};
-  const onCardTS=(ev,e)=>{cardMoved.current=false;cardTriggered.current=false;cardTmr.current=setTimeout(()=>{cardTriggered.current=true;vib([40,30,40]);setHoldingId(ev.id);setTimeout(()=>{setHoldingId(null);startEdit(ev);},400);},700);};
-  const onCardTM=()=>{if(!cardMoved.current){cardMoved.current=true;clearTimeout(cardTmr.current);cardTmr.current=null;}};
-  const onCardTE=(ev,e)=>{clearTimeout(cardTmr.current);cardTmr.current=null;if(cardTriggered.current)return;if(!cardMoved.current){doCopy(ev);}};
-  const onCardMD=(ev)=>{cardMoved.current=false;cardTriggered.current=false;cardTmr.current=setTimeout(()=>{cardTriggered.current=true;vib([40,30,40]);setHoldingId(ev.id);setTimeout(()=>{setHoldingId(null);startEdit(ev);},400);},700);};
-  useEffect(()=>{const mm=()=>{if(!cardMoved.current){cardMoved.current=true;clearTimeout(cardTmr.current);}};window.addEventListener('mousemove',mm);return()=>window.removeEventListener('mousemove',mm);},[]);
-  const onCardMU=(ev)=>{clearTimeout(cardTmr.current);cardTmr.current=null;if(cardTriggered.current)return;if(!cardMoved.current){doCopy(ev);}};
 
   const saveEv=()=>{if(!eName.trim()||!sel.length||busy.current)return;busy.current=true;
     const nm=eName.trim(),ds=[...sel],st=sTime,et=eTime;
@@ -444,9 +450,15 @@ function App(){
   );
 
   const renderDutyItem=(d,i,arr)=>{
-    const u=gU(d.dl,d.dlt,d.urgency);const isG=glowId===d.id;
+    const u=gU(d.dl,d.dlt,d.urgency);const isG=glowId===d.id;const isHold=holdingId===d.id;
     return(<SwipeDel key={d.id} onDel={()=>delD(d.id)} bg="bg-gray-900">
-      <div className={'px-4 py-3.5 transition-colors duration-300 '+(i<arr.length-1?'border-b border-gray-700/50 ':'')+(isG?'bg-green-900/20':'')}>
+      <div
+        onTouchStart={()=>{if(!isG)lpStart(d.id,()=>editDFn(d));}}
+        onTouchMove={lpMove}
+        onTouchEnd={lpEnd}
+        onMouseDown={()=>{if(!isG)lpStart(d.id,()=>editDFn(d));}}
+        onMouseUp={lpEnd}
+        className={'px-4 py-3.5 transition-colors duration-300 no-sel '+(i<arr.length-1?'border-b border-gray-700/50 ':'')+(isG?'bg-green-900/20':isHold?'card-hold':'')}>
       <div className="flex items-start gap-3">
         <button onClick={()=>togD(d.id)} disabled={!!glowId&&glowId!==d.id}
           className={'mt-0.5 w-7 h-7 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all duration-300 '+(isG?'bg-green-500 border-green-500 green-glow':'border-gray-600')}
@@ -455,15 +467,13 @@ function App(){
           <div className="flex items-center gap-2 flex-wrap">
             <h3 className={'font-semibold text-sm transition-all duration-300 '+(isG?'line-through text-gray-500':'')}>{d.title}</h3>
             {isG?<span className="px-2 py-0.5 rounded-lg text-xs font-medium bg-green-900/40 text-green-300">完成 ✓</span>
+              :isHold?<span className="px-2 py-0.5 rounded-lg text-xs font-medium bg-purple-900/50 text-purple-300 flex items-center gap-1"><Ic name="pencil" className="w-3 h-3"/>修改中…</span>
               :<span className={'px-2 py-0.5 rounded-lg text-xs font-medium '+u.bg}>{u.lb}</span>}
           </div>
           {d.content&&<p className={'text-xs mt-1 transition-opacity duration-300 '+(isG?'opacity-30 text-gray-500':'text-gray-400')}>{d.content}</p>}
           {d.dl&&!isG&&<div className="flex items-center gap-3 flex-wrap mt-1.5"><span className="text-xs text-gray-500">{dd(d.dl)}{d.dlt&&` ${fT(d.dlt)}`}</span><span className={'text-xs '+(u.p<=1?'text-red-400':'text-gray-500')}>{rDL(d.dl,d.dlt)}</span></div>}
-          {!isG&&<div className="flex items-center gap-3 mt-2">
-            <button onClick={()=>editDFn(d)} className="text-xs text-gray-500 flex items-center gap-1"><Ic name="pencil" className="w-3 h-3"/>修改</button>
-          </div>}
         </div>
-        {!isG&&<div className={'w-2.5 h-2.5 rounded-full flex-shrink-0 mt-1.5 '+u.dot+(u.pu?' animate-pulse':'')}/>}
+        {!isG&&!isHold&&<div className={'w-2.5 h-2.5 rounded-full flex-shrink-0 mt-1.5 '+u.dot+(u.pu?' animate-pulse':'')}/>}
       </div>
     </div></SwipeDel>);
   };
@@ -472,8 +482,11 @@ function App(){
     const gs=groupC(ev.dates),tl=gTL(ev),tag=getSchedTag(ev.dates),isCp=copiedId===ev.id,isHold=holdingId===ev.id;
     return(<SwipeDel key={ev.id} onDel={()=>delEv(ev.id)} rcls="rounded-2xl" bg="bg-gray-900">
       <div
-        onTouchStart={e=>onCardTS(ev,e)} onTouchMove={onCardTM} onTouchEnd={e=>onCardTE(ev,e)}
-        onMouseDown={()=>onCardMD(ev)} onMouseUp={()=>onCardMU(ev)}
+        onTouchStart={()=>lpStart(ev.id,()=>startEdit(ev))}
+        onTouchMove={lpMove}
+        onTouchEnd={()=>lpEndTap(()=>doCopy(ev))}
+        onMouseDown={()=>lpStart(ev.id,()=>startEdit(ev))}
+        onMouseUp={()=>lpEndTap(()=>doCopy(ev))}
         className={'bg-gray-900 rounded-2xl border overflow-hidden cursor-pointer no-sel '
           +(isCp?'border-green-600 ':isHold?'border-purple-500 card-hold ':isComp?'border-gray-800/50 ':'border-gray-800 ')
           +(isComp?'opacity-50 ':'')}>
@@ -543,6 +556,7 @@ function App(){
       </div>
     </div>
 
+    {/* ═══ 排期 ═══ */}
     {view==='schedule'&&<div>
       {showForm&&<div ref={formRef} className="bg-gray-900 rounded-2xl p-4 mb-6 border border-gray-800">
         <div className="flex items-center justify-between mb-4"><h2 className="font-semibold text-lg">{editId?'修改排期':'新增排期'}</h2><button onClick={resetF}><Ic name="x" className="w-5 h-5 text-gray-500"/></button></div>
@@ -603,11 +617,16 @@ function App(){
       </div>}
     </div>}
 
+    {/* ═══ Duty ═══ */}
     {view==='duty'&&<div>
       {urgD.length>0&&!showDF&&<div className="bg-gray-900 rounded-2xl border border-red-900/40 p-4 mb-5">
         <div className="flex items-center gap-2 text-red-300 text-sm font-semibold mb-3"><Ic name="alert" className="w-4 h-4"/>⚡ 優先處理<span className="text-xs text-red-500 ml-auto">{urgD.length}項</span></div>
-        <div className="space-y-2">{urgD.map(d=>{const u=gU(d.dl,d.dlt,d.urgency);return<div key={d.id} onClick={()=>editDFn(d)} className="flex items-center gap-3 bg-gray-800 rounded-xl px-3 py-2.5 cursor-pointer">
-          <div className={'w-2.5 h-2.5 rounded-full flex-shrink-0 '+u.dot+(u.pu?' animate-pulse':'')}/><span className="text-sm flex-1 truncate">{d.title}</span><span className={'text-xs font-medium '+(u.p<=1?'text-red-400':'text-amber-400')}>{d.dl?rDL(d.dl,d.dlt):u.lb}</span>
+        <div className="space-y-2">{urgD.map(d=>{const u=gU(d.dl,d.dlt,d.urgency);const isHold=holdingId===d.id;return<div key={d.id}
+          onTouchStart={()=>lpStart(d.id,()=>editDFn(d))} onTouchMove={lpMove} onTouchEnd={lpEnd}
+          onMouseDown={()=>lpStart(d.id,()=>editDFn(d))} onMouseUp={lpEnd}
+          className={'flex items-center gap-3 bg-gray-800 rounded-xl px-3 py-2.5 cursor-pointer no-sel'+(isHold?' card-hold':'')}>
+          <div className={'w-2.5 h-2.5 rounded-full flex-shrink-0 '+u.dot+(u.pu?' animate-pulse':'')}/><span className="text-sm flex-1 truncate">{d.title}</span>
+          {isHold?<span className="text-xs text-purple-400">修改中…</span>:<span className={'text-xs font-medium '+(u.p<=1?'text-red-400':'text-amber-400')}>{d.dl?rDL(d.dl,d.dlt):u.lb}</span>}
         </div>;})}</div>
       </div>}
       {showDF&&<div ref={formRef} className="bg-gray-900 rounded-2xl p-4 mb-5 border border-gray-800">
@@ -631,6 +650,9 @@ function App(){
         <button onClick={saveD} disabled={!dTitle.trim()} className="w-full py-3 rounded-xl font-semibold text-sm bg-purple-600 disabled:bg-gray-700 disabled:text-gray-500">{editDId?'更新':'新增'}</button>
       </div>}
       {actD.length===0&&!showDF&&doneD.length===0&&<div className="text-center text-gray-500 py-16"><Ic name="clipboard" className="w-12 h-12 mx-auto mb-3 opacity-30"/><p>未有事項</p></div>}
+
+      {!showDF&&actD.length>0&&<div className="text-xs text-gray-500 bg-gray-900/50 rounded-xl px-3 py-2 mb-4 text-center no-sel">💡 長㩒0.7秒＝修改 ｜ ⬅️ 左拉＝刪除</div>}
+
       {dlD.length>0&&<div className="mb-5">
         <div className="flex items-center gap-2 mb-3 px-1"><Ic name="clock" className="w-4 h-4 text-purple-400"/><span className="text-sm font-semibold text-gray-300">有限期</span><span className="text-xs text-gray-600">{dlD.length}</span></div>
         <div className="bg-gray-900 rounded-2xl border border-gray-800 overflow-hidden">{dlD.map((d,i)=>renderDutyItem(d,i,dlD))}</div>
@@ -658,6 +680,7 @@ function App(){
       </div>}
     </div>}
 
+    {/* ═══ 同事紀錄 ═══ */}
     {view==='colleagues'&&<div>
       {showAddCol&&<div className="bg-gray-900 rounded-2xl p-4 mb-4 border border-gray-800">
         <div className="flex items-center justify-between mb-3"><h3 className="font-semibold">新增同事</h3><button onClick={()=>{setShowAddCol(false);setNewCol('');}}><Ic name="x" className="w-5 h-5 text-gray-500"/></button></div>
@@ -666,6 +689,9 @@ function App(){
           <button onClick={addColFn} disabled={!newCol.trim()} className="bg-purple-600 disabled:bg-gray-700 disabled:text-gray-500 text-white px-5 py-2.5 rounded-xl font-medium text-sm">確認</button>
         </div>
       </div>}
+
+      {cols.length>0&&!showAddCol&&<div className="text-xs text-gray-500 bg-gray-900/50 rounded-xl px-3 py-2 mb-4 text-center no-sel">💡 長㩒紀錄0.7秒＝修改 ｜ ⬅️ 左拉＝刪除</div>}
+
       <div className="space-y-4">
         {cols.length===0&&!showAddCol&&<div className="text-center text-gray-500 py-16"><Ic name="users" className="w-12 h-12 mx-auto mb-3 opacity-30"/><p>未有同事紀錄</p></div>}
         {cols.map(c=>{const isE=expCol===c.id,isA=addRecCol===c.id;return(
@@ -697,10 +723,14 @@ function App(){
             </div>}
             {c.records.length===0&&!isA&&<div className="text-center text-gray-500 py-6 text-sm">未有紀錄</div>}
             {c.records.length>0&&<div className="bg-gray-800 rounded-xl overflow-hidden">{c.records.map((r,ri)=>{
-              const hasFiles=r.files&&r.files.length>0;const singleFile=hasFiles&&r.files.length===1;
+              const hasFiles=r.files&&r.files.length>0;const singleFile=hasFiles&&r.files.length===1;const isHold=holdingId===r.id;
               return(<SwipeDel key={r.id} onDel={()=>delRec(c.id,r.id)} bg="bg-gray-800">
-              <div className={'px-4 py-3 '+(ri<c.records.length-1?'border-b border-gray-700/50':'')}>
-              {(r.date||r.time)&&<div className="text-xs text-purple-300 mb-1.5 flex items-center gap-1"><Ic name="cal" className="w-3 h-3"/>{r.date&&dd(r.date)}{r.time&&` ${fT(r.time)}`}</div>}
+              <div
+                onTouchStart={()=>lpStart(r.id,()=>openER(c.id,r))} onTouchMove={lpMove} onTouchEnd={lpEnd}
+                onMouseDown={()=>lpStart(r.id,()=>openER(c.id,r))} onMouseUp={lpEnd}
+                className={'px-4 py-3 no-sel cursor-pointer '+(ri<c.records.length-1?'border-b border-gray-700/50 ':'')+(isHold?'card-hold':'')}>
+              {isHold&&<div className="text-xs text-purple-400 mb-1 flex items-center gap-1"><Ic name="pencil" className="w-3 h-3"/>修改中…</div>}
+              {!isHold&&(r.date||r.time)&&<div className="text-xs text-purple-300 mb-1.5 flex items-center gap-1"><Ic name="cal" className="w-3 h-3"/>{r.date&&dd(r.date)}{r.time&&` ${fT(r.time)}`}</div>}
               {singleFile?
                 <div className="flex gap-3 items-start">
                   <p className="text-sm text-gray-200 whitespace-pre-wrap break-words flex-1 min-w-0">{r.content}</p>
@@ -710,9 +740,6 @@ function App(){
                 <p className="text-sm text-gray-200 whitespace-pre-wrap break-words">{r.content}</p>
                 {hasFiles&&<div className="flex gap-2 mt-2 thumb-scroll pb-1">{r.files.map(f=><Thumb key={f.id} f={f} size="w-14 h-14" onTap={fl=>fl.isImage&&setPreviewImg(fl.url)}/>)}</div>}
               </div>}
-              <div className="mt-2 flex items-center gap-3">
-                <button onClick={()=>openER(c.id,r)} className="text-xs text-gray-500 flex items-center gap-1"><Ic name="pencil" className="w-3 h-3"/>修改</button>
-              </div>
             </div></SwipeDel>)})}</div>}
             {!isA&&<button onClick={()=>openAR(c.id)} className="w-full mt-3 py-2.5 rounded-xl text-sm text-purple-400 border border-dashed border-gray-700 flex items-center justify-center gap-1"><Ic name="plus" className="w-3.5 h-3.5"/>新增紀錄</button>}
           </div>}
@@ -720,6 +747,7 @@ function App(){
       </div>
     </div>}
 
+    {/* ═══ 公司需知 ═══ */}
     {view==='info'&&<div>
       {showAddTopic&&<div className="bg-gray-900 rounded-2xl p-4 mb-4 border border-gray-800">
         <div className="flex items-center justify-between mb-3"><h3 className="font-semibold">新增分類</h3><button onClick={()=>{setShowAddTopic(false);setNewTopic('');}}><Ic name="x" className="w-5 h-5 text-gray-500"/></button></div>
@@ -728,6 +756,9 @@ function App(){
           <button onClick={addTopicFn} disabled={!newTopic.trim()} className="bg-purple-600 disabled:bg-gray-700 disabled:text-gray-500 text-white px-5 py-2.5 rounded-xl font-medium text-sm">確認</button>
         </div>
       </div>}
+
+      {topics.length>0&&!showAddTopic&&<div className="text-xs text-gray-500 bg-gray-900/50 rounded-xl px-3 py-2 mb-4 text-center no-sel">💡 長㩒資訊0.7秒＝修改 ｜ ⬅️ 左拉＝刪除</div>}
+
       <div className="space-y-4">
         {topics.length===0&&!showAddTopic&&<div className="text-center text-gray-500 py-16"><Ic name="book" className="w-12 h-12 mx-auto mb-3 opacity-30"/><p>未有公司需知紀錄</p></div>}
         {topics.map(tp=>{const isE=expTopic===tp.id,isA=addItemTopic===tp.id;return(
@@ -756,11 +787,14 @@ function App(){
             </div>}
             {tp.items.length===0&&!isA&&<div className="text-center text-gray-500 py-6 text-sm">未有資訊</div>}
             {tp.items.length>0&&<div className="bg-gray-800 rounded-xl overflow-hidden">{tp.items.map((it,ii)=>{
-              const hasFiles=it.files&&it.files.length>0;const singleFile=hasFiles&&it.files.length===1;
+              const hasFiles=it.files&&it.files.length>0;const singleFile=hasFiles&&it.files.length===1;const isHold=holdingId===it.id;
               return(<SwipeDel key={it.id} onDel={()=>delItem(tp.id,it.id)} bg="bg-gray-800">
-              <div className={'px-4 py-3 '+(ii<tp.items.length-1?'border-b border-gray-700/50':'')}>
+              <div className={'px-4 py-3 '+(ii<tp.items.length-1?'border-b border-gray-700/50 ':'')+(isHold?'card-hold':'')}>
               <div className="flex items-start gap-2">
-                <div className="flex-1 min-w-0">
+                <div className="flex-1 min-w-0 no-sel cursor-pointer"
+                  onTouchStart={()=>lpStart(it.id,()=>openEI(tp.id,it))} onTouchMove={lpMove} onTouchEnd={lpEnd}
+                  onMouseDown={()=>lpStart(it.id,()=>openEI(tp.id,it))} onMouseUp={lpEnd}>
+                  {isHold&&<div className="text-xs text-purple-400 mb-1 flex items-center gap-1"><Ic name="pencil" className="w-3 h-3"/>修改中…</div>}
                   {singleFile?
                     <div className="flex gap-3 items-start">
                       <div className="flex-1 min-w-0">
@@ -779,9 +813,6 @@ function App(){
                   <button onClick={()=>moveItem(tp.id,it.id,-1)} disabled={ii===0} className="p-1 text-gray-500 disabled:opacity-20"><Ic name="up" className="w-3.5 h-3.5"/></button>
                   <button onClick={()=>moveItem(tp.id,it.id,1)} disabled={ii===tp.items.length-1} className="p-1 text-gray-500 disabled:opacity-20"><Ic name="down" className="w-3.5 h-3.5"/></button>
                 </div>
-              </div>
-              <div className="mt-2 flex items-center gap-3">
-                <button onClick={()=>openEI(tp.id,it)} className="text-xs text-gray-500 flex items-center gap-1"><Ic name="pencil" className="w-3 h-3"/>修改</button>
               </div>
             </div></SwipeDel>)})}</div>}
             {!isA&&<button onClick={()=>openAI(tp.id)} className="w-full mt-3 py-2.5 rounded-xl text-sm text-blue-400 border border-dashed border-gray-700 flex items-center justify-center gap-1"><Ic name="plus" className="w-3.5 h-3.5"/>新增資訊</button>}
