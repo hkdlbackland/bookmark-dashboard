@@ -67,7 +67,6 @@ const WE=['sun','mon','tue','wed','thu','fri','sat'];
 const MO=['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
 const fmt=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 const pd=s=>new Date(s+'T00:00:00');
-/* ✅ 年份顯示 */
 const dd=s=>{const d=pd(s);return`${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()}（${WD[d.getDay()]}）`;};
 const cd=s=>{const d=pd(s);return`${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()}（${WE[d.getDay()]}）`;};
 const sd=s=>{const d=pd(s);return`${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()}`;};
@@ -78,10 +77,18 @@ function bCopy(ev){const g=groupC(ev.dates),l=[`📌 ${ev.name}`];if(ev.st&&ev.e
 function vib(p){try{navigator.vibrate?.(p||[50,30,50]);}catch(e){}}
 function gTL(ev){if(ev.st&&ev.et)return`${fT(ev.st)}–${fT(ev.et)}`;if(ev.st)return fT(ev.st);if(ev.et)return`${fT(ev.et)} off`;return'';}
 
-/* ✅ 排期提醒 tag */
-function getSchedTag(dates){const now=new Date();now.setHours(0,0,0,0);const ts=fmt(now);const fut=dates.filter(d=>d>=ts).sort();if(!fut.length)return null;const diff=Math.round((pd(fut[0])-now)/864e5);if(diff===0)return{lb:'今日',cls:'bg-red-500 text-white',pu:true};if(diff===1)return{lb:'聽日',cls:'bg-orange-500 text-white',pu:false};if(diff===2)return{lb:'後日',cls:'bg-yellow-500 text-gray-900',pu:false};if(diff<=7)return{lb:'剩'+diff+'日',cls:'bg-blue-500/80 text-white',pu:false};return null;}
-/* ✅ 已過期倒數 */
-function schedDaysLeft(dates){const t=new Date();t.setHours(0,0,0,0);const l=[...dates].sort().pop();if(!l)return 0;return Math.max(0,6-Math.round((t-pd(l))/864e5));}
+function getSchedTag(dates){
+  const now=new Date();now.setHours(0,0,0,0);const ts=fmt(now);
+  const fut=dates.filter(d=>d>=ts).sort();
+  if(!fut.length){const last=[...dates].sort().pop();if(!last)return{lb:'已過期',cls:'bg-gray-600 text-gray-200',pri:1000};const since=Math.round((now-pd(last))/864e5);return{lb:`過期${since}日`,cls:'bg-gray-600 text-gray-200',pri:1000+since};}
+  if(dates.includes(ts))return{lb:'今日',cls:'bg-red-500 text-white',pu:true,pri:0};
+  const diff=Math.round((pd(fut[0])-now)/864e5);
+  if(diff===1)return{lb:'聽日',cls:'bg-orange-500 text-white',pri:1};
+  if(diff===2)return{lb:'後日',cls:'bg-yellow-500 text-gray-900',pri:2};
+  if(diff<=7)return{lb:'剩'+diff+'日',cls:'bg-blue-500/80 text-white',pri:diff};
+  return{lb:'剩'+diff+'日',cls:'bg-gray-600 text-gray-200',pri:100+diff};
+}
+function schedPri(ev){return getSchedTag(ev.dates).pri;}
 
 function gU(dl,dlt,urg){
   if(urg==='urgent')return{lb:'緊急',dot:'bg-red-500',bg:'bg-red-900/40 text-red-300',p:-1,pu:true};
@@ -97,7 +104,6 @@ function gU(dl,dlt,urg){
   if(d<8)return{lb:`${Math.ceil(d)}日後`,dot:'bg-purple-400',bg:'bg-purple-900/30 text-purple-300',p:5,pu:false};
   return{lb:`${Math.ceil(d)}日後`,dot:'bg-gray-400',bg:'bg-gray-800 text-gray-400',p:6,pu:false};
 }
-
 function rDL(dl,dt){if(!dl)return'';const ms=new Date(dl+'T'+(dt||'23:59')+':00')-new Date(),a=Math.abs(ms),h=Math.floor(a/36e5),d=Math.floor(a/864e5),mi=Math.floor(a/6e4);if(ms<0)return d>0?`過期${d}日`:h>0?`過期${h}小時`:`過期${mi}分鐘`;return d>0?`仲有${d}日`:h>0?`仲有${h}小時`:`仲有${mi}分鐘`;}
 function fileInfo(name){const e=(name||'').split('.').pop().toLowerCase();if(e==='pdf')return{c:'bg-red-900/60 text-red-300',l:'PDF'};if(['doc','docx'].includes(e))return{c:'bg-blue-900/60 text-blue-300',l:'DOC'};if(['xls','xlsx'].includes(e))return{c:'bg-green-900/60 text-green-300',l:'XLS'};if(['ppt','pptx'].includes(e))return{c:'bg-orange-900/60 text-orange-300',l:'PPT'};return{c:'bg-gray-700 text-gray-300',l:e.toUpperCase()||'FILE'};}
 
@@ -140,7 +146,6 @@ function TimeBtn({value,onChange,onClear,disabled}){
 }
 
 const dp={enterKeyHint:'done',onKeyDown:e=>{if(e.key==='Enter'){e.preventDefault();e.target.blur();}}};
-
 const URG_OPTS=[
   {k:'',l:'自動',ac:'border-purple-600 bg-purple-900/50 text-purple-300'},
   {k:'urgent',l:'🔴 緊急',ac:'border-red-600 bg-red-900/50 text-red-300'},
@@ -148,10 +153,39 @@ const URG_OPTS=[
   {k:'low',l:'🟢 唔急',ac:'border-green-600 bg-green-900/50 text-green-300'}
 ];
 
+/* ── SwipeDel ── */
+let _osd=null,_osf=null;
+function SwipeDel({onDel,children,bg='bg-gray-900',rcls=''}){
+  const[isOp,setIsOp]=useState(false);
+  const sr=useRef(null);
+  const t=useRef({a:false,sx:0,sy:0,dl:false,isH:false});
+  const DW=72;
+  const stf=useCallback((x,an)=>{if(!sr.current)return;sr.current.style.transition=an?'transform 0.25s ease-out':'none';sr.current.style.transform=`translateX(${x}px)`;},[]);
+  const cls=useCallback(()=>{setIsOp(false);stf(0,true);if(_osd===sr.current){_osd=null;_osf=null;}},[stf]);
+  const opn=useCallback(()=>{setIsOp(true);stf(-DW,true);_osd=sr.current;_osf=cls;},[stf,cls]);
+  useEffect(()=>()=>{if(_osd===sr.current){_osd=null;_osf=null;}},[]);
+  const hTS=useCallback(e=>{if(_osd&&_osd!==sr.current)_osf?.();const tc=e.touches?.[0];if(!tc)return;t.current={a:true,sx:tc.clientX,sy:tc.clientY,dl:false,isH:false};},[]);
+  const hTM=useCallback(e=>{const r=t.current;if(!r.a)return;const tc=e.touches?.[0];if(!tc)return;const dx=tc.clientX-r.sx,dy=tc.clientY-r.sy;if(!r.dl){if(Math.abs(dx)>8||Math.abs(dy)>8){r.dl=true;r.isH=Math.abs(dx)>=Math.abs(dy);}return;}if(!r.isH){r.a=false;return;}e.stopPropagation();e.preventDefault();stf(Math.min(8,Math.max(-DW-8,dx)),false);},[stf]);
+  const hTE=useCallback(()=>{const r=t.current;if(!r.a)return;r.a=false;const m=sr.current?.style.transform?.match(/translateX\((.+?)px\)/);const cur=m?parseFloat(m[1]):0;if(r.dl&&r.isH){if(cur<-DW*0.35)opn();else cls();}},[opn,cls]);
+  return(<div className={`relative overflow-hidden ${rcls}`}>
+    <div className="absolute right-0 top-0 bottom-0 flex items-stretch" style={{width:DW}}>
+      <button onClick={()=>onDel?.()} className="w-full flex items-center justify-center bg-red-500 active:bg-red-600"><Ic name="trash" className="w-5 h-5 text-white"/></button>
+    </div>
+    <div ref={sr} onTouchStart={hTS} onTouchMove={hTM} onTouchEnd={hTE} onTouchCancel={hTE}
+      className={`relative z-10 ${bg}`} style={{willChange:'transform'}}>
+      {children}
+      {isOp&&<div className="absolute inset-0 z-30"
+        onTouchStart={e=>{e.stopPropagation();cls();}}
+        onTouchMove={e=>e.stopPropagation()}
+        onTouchEnd={e=>e.stopPropagation()}
+        onClick={e=>{e.stopPropagation();cls();}}/>}
+    </div>
+  </div>);
+}
+
 function App(){
   const[loading,setLoading]=useState(true);
   const[loadErr,setLoadErr]=useState(false);
-  const[saving,setSaving]=useState(false);
   const[view,setView]=useState('schedule');
   const[showDD,setShowDD]=useState(false);
   const[vMo,setVMo]=useState(new Date(new Date().getFullYear(),new Date().getMonth(),1));
@@ -207,22 +241,18 @@ function App(){
   const selRef=useRef(sel);
   const fileInpRec=useRef(null);
   const fileInpItem=useRef(null);
+  const busy=useRef(false);
   useEffect(()=>{selRef.current=sel;},[sel]);
 
   const[tick,setTick]=useState(0);
   useEffect(()=>{const iv=setInterval(()=>setTick(t=>t+1),60000);return()=>clearInterval(iv);},[]);
   const sToast=msg=>{setToast(msg);setTimeout(()=>setToast(''),2000);};
 
-  /* ── LOAD DATA + ✅ 自動清除 >5日 已過期排期 ── */
+  /* ── LOAD DATA ── */
   const loadData=useCallback(async(showToast)=>{
     try{
       const d=await apiGet();
-      let scheds=(d.schedules||[]).map(s=>({id:s.id,name:s.name,dates:Array.isArray(s.dates)?s.dates:[],st:s.st||'',et:s.et||''}));
-      /* auto-clean: delete schedules where ALL dates passed > 5 days ago */
-      const _td=new Date();_td.setHours(0,0,0,0);
-      const toClean=scheds.filter(ev=>{if(!ev.dates.length)return false;const last=[...ev.dates].sort().pop();return(_td-pd(last))/864e5>5;});
-      if(toClean.length>0){await Promise.all(toClean.map(ev=>apiPost({action:'deleteSchedule',id:ev.id}).catch(()=>{})));scheds=scheds.filter(ev=>!toClean.find(c=>c.id===ev.id));}
-      setEvents(scheds);
+      setEvents((d.schedules||[]).map(s=>({id:s.id,name:s.name,dates:Array.isArray(s.dates)?s.dates:[],st:s.st||'',et:s.et||''})));
       setDuties((d.duties||[]).map(x=>({id:x.id,title:x.title,content:x.content||'',dl:x.dl||'',dlt:x.dlt||'',urgency:x.urgency||'',done:x.done===true||x.done==='true',dAt:x.dAt||null})));
       const recs=(d.records||[]).map(r=>({...r,files:Array.isArray(r.files)?r.files:[]}));
       setCols((d.colleagues||[]).map(c=>({id:c.id,name:c.name,records:recs.filter(r=>String(r.colleagueId)===String(c.id)).sort((a,b)=>((b.date||'')+(b.time||'')).localeCompare((a.date||'')+(a.time||'')))})));
@@ -233,7 +263,6 @@ function App(){
     }catch(e){setLoadErr(true);if(showToast)sToast('載入失敗');}
     setLoading(false);
   },[]);
-
   useEffect(()=>{loadData();},[loadData]);
 
   /* ── FILE UPLOAD ── */
@@ -242,29 +271,26 @@ function App(){
     setUploading(true);
     const files=Array.from(e.target.files);const results=[];
     for(const f of files){
-      try{
-        if(f.size>5*1024*1024){sToast(f.name+' 太大（上限5MB）');continue;}
-        sToast('上傳中：'+f.name);
-        const b64=await fileToB64(f);
+      try{if(f.size>5*1024*1024){sToast(f.name+' 太大（上限5MB）');continue;}
+        sToast('上傳中：'+f.name);const b64=await fileToB64(f);
         const res=await apiPost({action:'uploadFile',base64:b64,fileName:f.name,mimeType:f.type});
-        if(res.success){results.push({id:res.fileId,name:res.fileName,type:res.mimeType,url:res.url,viewUrl:res.viewUrl,isImage:res.isImage});}
+        if(res.success)results.push({id:res.fileId,name:res.fileName,type:res.mimeType,url:res.url,viewUrl:res.viewUrl,isImage:res.isImage});
         else sToast('上傳失敗');
       }catch(err){sToast('上傳錯誤');}
     }
-    setFiles(p=>[...p,...results]);
-    setUploading(false);
-    if(results.length>0)sToast(`已上傳 ${results.length} 個附件`);
-    e.target.value='';
+    setFiles(p=>[...p,...results]);setUploading(false);
+    if(results.length>0)sToast(`已上傳 ${results.length} 個附件`);e.target.value='';
   };
 
   const calDays=useMemo(()=>{const y=vMo.getFullYear(),m=vMo.getMonth(),fd=new Date(y,m,1).getDay(),dim=new Date(y,m+1,0).getDate(),d=[];for(let i=0;i<fd;i++)d.push(null);for(let i=1;i<=dim;i++)d.push(i);return d;},[vMo]);
   const preSet=useMemo(()=>{if(!drag.a||!drag.s||!drag.e)return new Set();return drag.s===drag.e?new Set([drag.s]):new Set(getRange(drag.s,drag.e));},[drag]);
   const evDates=useMemo(()=>{if(showForm&&!editId)return new Set();const s=new Set();events.forEach(e=>{if(showForm&&e.id===editId)return;e.dates.forEach(d=>s.add(d));});return s;},[showForm,editId,events]);
 
-  /* ✅ 排期：活躍 / 已過期 / summary */
   const todayStr=useMemo(()=>fmt(new Date()),[tick]);
-  const activeEvs=useMemo(()=>events.filter(ev=>ev.dates.some(d=>d>=todayStr)),[events,todayStr]);
-  const compEvs=useMemo(()=>events.filter(ev=>ev.dates.length>0&&ev.dates.every(d=>d<todayStr)).sort((a,b)=>{const la=[...a.dates].sort().pop()||'';const lb=[...b.dates].sort().pop()||'';return lb.localeCompare(la);}),[events,todayStr]);
+  /* 活躍排期: 有未來日期 OR 過期<=5日 */
+  const activeEvs=useMemo(()=>{const now=new Date();now.setHours(0,0,0,0);return events.filter(ev=>{if(!ev.dates.length)return true;const last=[...ev.dates].sort().pop();if(ev.dates.some(d=>d>=todayStr))return true;return Math.round((now-pd(last))/864e5)<=5;}).sort((a,b)=>schedPri(a)-schedPri(b));},[events,todayStr]);
+  /* 已過期: 過期>5日 */
+  const compEvs=useMemo(()=>{const now=new Date();now.setHours(0,0,0,0);return events.filter(ev=>{if(!ev.dates.length)return false;if(ev.dates.some(d=>d>=todayStr))return false;const last=[...ev.dates].sort().pop();return Math.round((now-pd(last))/864e5)>5;}).sort((a,b)=>{const la=[...a.dates].sort().pop()||'';const lb=[...b.dates].sort().pop()||'';return lb.localeCompare(la);});},[events,todayStr]);
   const schedSum=useMemo(()=>{const t=new Date();t.setHours(0,0,0,0);const ts=fmt(t);const tmr=new Date(t);tmr.setDate(tmr.getDate()+1);const ms=fmt(tmr);const we=new Date(t);we.setDate(we.getDate()+7);const ws=fmt(we);let tC=0,mC=0,wC=0;activeEvs.forEach(ev=>{if(ev.dates.includes(ts))tC++;if(ev.dates.includes(ms))mC++;if(ev.dates.some(d=>d>=ts&&d<=ws))wC++;});return{tC,mC,wC};},[activeEvs,tick]);
 
   const actD=useMemo(()=>duties.filter(d=>!d.done).sort((a,b)=>gU(a.dl,a.dlt,a.urgency).p-gU(b.dl,b.dlt,b.urgency).p),[duties,tick]);
@@ -275,6 +301,7 @@ function App(){
 
   const toggleDate=useCallback(ds=>{setSel(p=>p.includes(ds)?p.filter(x=>x!==ds):[...p,ds].sort());},[]);
 
+  /* ── Calendar Touch ── */
   useEffect(()=>{
     const el=gridRef.current;if(!el)return;
     let sPos=null,sDate=null,cDate=null,tmr=null,holdReady=false,dragActive=false,dirLocked=false,isV=false,dMode=null;
@@ -296,75 +323,111 @@ function App(){
     window.addEventListener('mousemove',mm);window.addEventListener('mouseup',mu);return()=>{window.removeEventListener('mousemove',mm);window.removeEventListener('mouseup',mu);};
   },[toggleDate]);
 
+  /* ── Schedule Card Touch (0.7s long press) ── */
   const cardTmr=useRef(null);const cardMoved=useRef(false);const cardTriggered=useRef(false);
   const doCopy=ev=>{const t=bCopy(ev);try{navigator.clipboard?.writeText(t);}catch(e){}vib();setCopiedId(ev.id);sToast('已複製！');setTimeout(()=>setCopiedId(null),1500);};
   const startEdit=ev=>{setEditId(ev.id);setEName(ev.name);setSel([...ev.dates]);setSTime(ev.st||'');setETime(ev.et||'');setShowForm(true);if(ev.dates.length>0){const d=pd(ev.dates[0]);setVMo(new Date(d.getFullYear(),d.getMonth(),1));}setTimeout(()=>formRef.current?.scrollIntoView({behavior:'smooth',block:'start'}),150);};
-  const onCardTS=(ev,e)=>{cardMoved.current=false;cardTriggered.current=false;cardTmr.current=setTimeout(()=>{cardTriggered.current=true;vib([40,30,40]);setHoldingId(ev.id);setTimeout(()=>{setHoldingId(null);startEdit(ev);},400);},500);};
+  const onCardTS=(ev,e)=>{cardMoved.current=false;cardTriggered.current=false;cardTmr.current=setTimeout(()=>{cardTriggered.current=true;vib([40,30,40]);setHoldingId(ev.id);setTimeout(()=>{setHoldingId(null);startEdit(ev);},400);},700);};
   const onCardTM=()=>{if(!cardMoved.current){cardMoved.current=true;clearTimeout(cardTmr.current);cardTmr.current=null;}};
   const onCardTE=(ev,e)=>{clearTimeout(cardTmr.current);cardTmr.current=null;if(cardTriggered.current)return;if(!cardMoved.current){doCopy(ev);}};
-  const onCardMD=(ev)=>{cardMoved.current=false;cardTriggered.current=false;cardTmr.current=setTimeout(()=>{cardTriggered.current=true;vib([40,30,40]);setHoldingId(ev.id);setTimeout(()=>{setHoldingId(null);startEdit(ev);},400);},500);};
+  const onCardMD=(ev)=>{cardMoved.current=false;cardTriggered.current=false;cardTmr.current=setTimeout(()=>{cardTriggered.current=true;vib([40,30,40]);setHoldingId(ev.id);setTimeout(()=>{setHoldingId(null);startEdit(ev);},400);},700);};
   useEffect(()=>{const mm=()=>{if(!cardMoved.current){cardMoved.current=true;clearTimeout(cardTmr.current);}};window.addEventListener('mousemove',mm);return()=>window.removeEventListener('mousemove',mm);},[]);
   const onCardMU=(ev)=>{clearTimeout(cardTmr.current);cardTmr.current=null;if(cardTriggered.current)return;if(!cardMoved.current){doCopy(ev);}};
 
-  /* ── SCHEDULE CRUD ── */
-  const saveEv=async()=>{if(!eName.trim()||!sel.length||saving)return;setSaving(true);
-    try{if(editId)await apiPost({action:'updateSchedule',id:editId,name:eName.trim(),dates:[...sel],st:sTime,et:eTime});
-    else await apiPost({action:'addSchedule',name:eName.trim(),dates:[...sel],st:sTime,et:eTime});
-    sToast(editId?'已更新':'已儲存');resetF();await loadData();}catch(e){sToast('儲存失敗');}setSaving(false);};
+  /* ── SCHEDULE CRUD (Optimistic) ── */
+  const saveEv=()=>{if(!eName.trim()||!sel.length||busy.current)return;busy.current=true;
+    const nm=eName.trim(),ds=[...sel],st=sTime,et=eTime;
+    if(editId){
+      setEvents(p=>p.map(e=>e.id===editId?{...e,name:nm,dates:ds,st,et}:e));
+      resetF();sToast('已更新');
+      apiPost({action:'updateSchedule',id:editId,name:nm,dates:ds,st,et}).then(()=>{busy.current=false;}).catch(()=>{busy.current=false;sToast('同步失敗');loadData();});
+    }else{
+      const tmpId='ts-'+Date.now();
+      setEvents(p=>[...p,{id:tmpId,name:nm,dates:ds,st,et}]);
+      resetF();sToast('已儲存');
+      apiPost({action:'addSchedule',name:nm,dates:ds,st,et}).then(res=>{busy.current=false;if(res?.id)setEvents(p=>p.map(e=>e.id===tmpId?{...e,id:res.id}:e));}).catch(()=>{busy.current=false;sToast('同步失敗');loadData();});
+    }};
   const resetF=()=>{setShowForm(false);setSel([]);setEName('');setSTime('');setETime('');setEditId(null);};
-  const delEv=async(id)=>{if(saving)return;setSaving(true);try{await apiPost({action:'deleteSchedule',id});sToast('已刪除');await loadData();}catch(e){sToast('刪除失敗');}setSaving(false);};
+  const delEv=id=>{setEvents(p=>p.filter(e=>e.id!==id));vib();sToast('已刪除');apiPost({action:'deleteSchedule',id}).catch(()=>{sToast('刪除失敗');loadData();});};
 
-  /* ── DUTY CRUD ── */
+  /* ── DUTY CRUD (Optimistic) ── */
   const resetDF=()=>{setShowDF(false);setEditDId(null);setDTitle('');setDCon('');setDDL('');setDDLT('');setDUrg('');};
-  const saveD=async()=>{if(!dTitle.trim()||saving)return;setSaving(true);
-    try{if(editDId)await apiPost({action:'updateDuty',id:editDId,title:dTitle.trim(),content:dCon.trim(),dl:dDL,dlt:dDLT,urgency:dUrg});
-    else await apiPost({action:'addDuty',title:dTitle.trim(),content:dCon.trim(),dl:dDL,dlt:dDLT,urgency:dUrg});
-    sToast(editDId?'已更新':'已新增');resetDF();await loadData();}catch(e){sToast('儲存失敗');}setSaving(false);};
+  const saveD=()=>{if(!dTitle.trim()||busy.current)return;busy.current=true;
+    const ti=dTitle.trim(),co=dCon.trim(),dl=dDL,dlt=dDLT,urg=dUrg;
+    if(editDId){
+      setDuties(p=>p.map(d=>d.id===editDId?{...d,title:ti,content:co,dl,dlt,urgency:urg}:d));
+      resetDF();sToast('已更新');
+      apiPost({action:'updateDuty',id:editDId,title:ti,content:co,dl,dlt,urgency:urg}).then(()=>{busy.current=false;}).catch(()=>{busy.current=false;loadData();});
+    }else{
+      const tmpId='td-'+Date.now();
+      setDuties(p=>[...p,{id:tmpId,title:ti,content:co,dl,dlt,urgency:urg,done:false,dAt:null}]);
+      resetDF();sToast('已新增');
+      apiPost({action:'addDuty',title:ti,content:co,dl,dlt,urgency:urg}).then(res=>{busy.current=false;if(res?.id)setDuties(p=>p.map(d=>d.id===tmpId?{...d,id:res.id}:d));}).catch(()=>{busy.current=false;loadData();});
+    }};
   const editDFn=d=>{setEditDId(d.id);setDTitle(d.title);setDCon(d.content||'');setDDL(d.dl||'');setDDLT(d.dlt||'');setDUrg(d.urgency||'');setShowDF(true);setTimeout(()=>formRef.current?.scrollIntoView({behavior:'smooth',block:'start'}),150);};
-  const togD=async id=>{const d=duties.find(x=>x.id===id);if(!d)return;
+  const togD=id=>{const d=duties.find(x=>x.id===id);if(!d)return;
     if(!d.done){if(glowId)return;vib([40,30,40]);setGlowId(id);sToast('已完成 ✓');
-      try{await apiPost({action:'toggleDuty',id,done:true,dAt:new Date().toISOString()});}catch(e){}
-      await new Promise(r=>setTimeout(r,700));await loadData();setGlowId(null);setShowDone(true);
-    }else{try{await apiPost({action:'toggleDuty',id,done:false,dAt:''});await loadData();sToast('已恢復');}catch(e){sToast('操作失敗');}}};
-  const delD=async id=>{if(saving)return;setSaving(true);try{await apiPost({action:'deleteDuty',id});sToast('已刪除');await loadData();}catch(e){sToast('刪除失敗');}setSaving(false);};
+      setTimeout(()=>{setDuties(p=>p.map(x=>x.id===id?{...x,done:true,dAt:new Date().toISOString()}:x));setGlowId(null);setShowDone(true);},700);
+      apiPost({action:'toggleDuty',id,done:true,dAt:new Date().toISOString()}).catch(()=>loadData());
+    }else{setDuties(p=>p.map(x=>x.id===id?{...x,done:false,dAt:''}:x));vib();sToast('已恢復');
+      apiPost({action:'toggleDuty',id,done:false,dAt:''}).catch(()=>{sToast('操作失敗');loadData();});}};
+  const delD=id=>{setDuties(p=>p.filter(d=>d.id!==id));vib();sToast('已刪除');apiPost({action:'deleteDuty',id}).catch(()=>{sToast('刪除失敗');loadData();});};
 
-  /* ── COLLEAGUE CRUD ── */
-  const addColFn=async()=>{if(!newCol.trim()||saving)return;setSaving(true);
-    try{await apiPost({action:'addColleague',name:newCol.trim()});sToast('已新增');setNewCol('');setShowAddCol(false);await loadData();}catch(e){sToast('新增失敗');}setSaving(false);};
-  const delCol=async id=>{if(saving)return;setSaving(true);
-    try{await apiPost({action:'deleteColleague',id});sToast('已刪除');await loadData();}catch(e){sToast('刪除失敗');}setSaving(false);};
+  /* ── COLLEAGUE CRUD (Optimistic) ── */
+  const addColFn=()=>{if(!newCol.trim()||busy.current)return;busy.current=true;
+    const nm=newCol.trim(),tmpId='tc-'+Date.now();
+    setCols(p=>[...p,{id:tmpId,name:nm,records:[]}]);setNewCol('');setShowAddCol(false);sToast('已新增');
+    apiPost({action:'addColleague',name:nm}).then(res=>{busy.current=false;if(res?.id)setCols(p=>p.map(c=>c.id===tmpId?{...c,id:res.id}:c));}).catch(()=>{busy.current=false;loadData();});};
+  const delCol=id=>{setCols(p=>p.filter(c=>c.id!==id));vib();sToast('已刪除');apiPost({action:'deleteColleague',id}).catch(()=>{sToast('刪除失敗');loadData();});};
 
-  /* ── RECORD CRUD ── */
+  /* ── RECORD CRUD (Optimistic) ── */
   const openAR=cId=>{setAddRecCol(cId);setRecTxt('');setRecDt(fmt(new Date()));setRecTm('');setRecFiles([]);setEditRec(null);};
   const openER=(cId,r)=>{setAddRecCol(cId);setRecTxt(r.content);setRecDt(r.date||'');setRecTm(r.time||'');setRecFiles(r.files||[]);setEditRec(r.id);};
-  const saveR=async()=>{if(!recTxt.trim()||!addRecCol||saving)return;setSaving(true);const fls=[...recFiles];
-    try{if(editRec)await apiPost({action:'updateRecord',id:editRec,content:recTxt.trim(),date:recDt,time:recTm,files:fls});
-    else await apiPost({action:'addRecord',colleagueId:addRecCol,content:recTxt.trim(),date:recDt,time:recTm,files:fls});
-    sToast(editRec?'已更新':'已新增');setAddRecCol(null);setRecTxt('');setEditRec(null);setRecFiles([]);await loadData();}catch(e){sToast('儲存失敗');}setSaving(false);};
-  const delRec=async(cId,rId)=>{if(saving)return;setSaving(true);
-    try{await apiPost({action:'deleteRecord',id:rId});sToast('已刪除');await loadData();}catch(e){sToast('刪除失敗');}setSaving(false);};
+  const saveR=()=>{if(!recTxt.trim()||!addRecCol||busy.current)return;busy.current=true;
+    const cId=addRecCol,ct=recTxt.trim(),dt=recDt,tm=recTm,fls=[...recFiles];
+    if(editRec){
+      setCols(p=>p.map(c=>c.id===cId?{...c,records:c.records.map(r=>r.id===editRec?{...r,content:ct,date:dt,time:tm,files:fls}:r)}:c));
+      setAddRecCol(null);setRecTxt('');setEditRec(null);setRecFiles([]);sToast('已更新');
+      apiPost({action:'updateRecord',id:editRec,content:ct,date:dt,time:tm,files:fls}).then(()=>{busy.current=false;}).catch(()=>{busy.current=false;loadData();});
+    }else{
+      const tmpId='tr-'+Date.now(),nr={id:tmpId,colleagueId:cId,content:ct,date:dt,time:tm,files:fls};
+      setCols(p=>p.map(c=>c.id===cId?{...c,records:[nr,...c.records]}:c));
+      setAddRecCol(null);setRecTxt('');setEditRec(null);setRecFiles([]);sToast('已新增');
+      apiPost({action:'addRecord',colleagueId:cId,content:ct,date:dt,time:tm,files:fls}).then(res=>{busy.current=false;if(res?.id)setCols(p=>p.map(c=>({...c,records:c.records.map(r=>r.id===tmpId?{...r,id:res.id}:r)})));}).catch(()=>{busy.current=false;loadData();});
+    }};
+  const delRec=(cId,rId)=>{setCols(p=>p.map(c=>c.id===cId?{...c,records:c.records.filter(r=>r.id!==rId)}:c));vib();sToast('已刪除');apiPost({action:'deleteRecord',id:rId}).catch(()=>{sToast('刪除失敗');loadData();});};
 
-  /* ── TOPIC CRUD ── */
-  const addTopicFn=async()=>{if(!newTopic.trim()||saving)return;setSaving(true);
-    try{const res=await apiPost({action:'addTopic',name:newTopic.trim()});sToast('已新增');setNewTopic('');setShowAddTopic(false);await loadData();if(res.id)setExpTopic(res.id);}catch(e){sToast('新增失敗');}setSaving(false);};
-  const delTopic=async id=>{if(saving)return;setSaving(true);
-    try{await apiPost({action:'deleteTopic',id});sToast('已刪除');await loadData();}catch(e){sToast('刪除失敗');}setSaving(false);};
+  /* ── TOPIC CRUD (Optimistic) ── */
+  const addTopicFn=()=>{if(!newTopic.trim()||busy.current)return;busy.current=true;
+    const nm=newTopic.trim(),tmpId='tt-'+Date.now();
+    setTopics(p=>[...p,{id:tmpId,name:nm,items:[]}]);setNewTopic('');setShowAddTopic(false);setExpTopic(tmpId);sToast('已新增');
+    apiPost({action:'addTopic',name:nm}).then(res=>{busy.current=false;if(res?.id){setTopics(p=>p.map(t=>t.id===tmpId?{...t,id:res.id}:t));setExpTopic(res.id);}}).catch(()=>{busy.current=false;loadData();});};
+  const delTopic=id=>{setTopics(p=>p.filter(t=>t.id!==id));vib();sToast('已刪除');apiPost({action:'deleteTopic',id}).catch(()=>{sToast('刪除失敗');loadData();});};
 
-  /* ── TOPIC ITEM CRUD ── */
+  /* ── TOPIC ITEM CRUD (Optimistic) ── */
   const openAI=tId=>{setAddItemTopic(tId);setItemTitle('');setItemCon('');setItemFiles([]);setEditItem(null);};
   const openEI=(tId,it)=>{setAddItemTopic(tId);setItemTitle(it.title);setItemCon(it.content||'');setItemFiles(it.files||[]);setEditItem(it.id);};
-  const saveItemFn=async()=>{if(!itemTitle.trim()||!addItemTopic||saving)return;setSaving(true);const fls=[...itemFiles];
-    const tp=topics.find(t=>t.id===addItemTopic);const order=tp?tp.items.length:0;
-    try{if(editItem){const old=tp?.items.find(i=>i.id===editItem);await apiPost({action:'updateTopicItem',id:editItem,title:itemTitle.trim(),content:itemCon.trim(),files:fls,sortOrder:old?old.sortOrder:0});}
-    else await apiPost({action:'addTopicItem',topicId:addItemTopic,title:itemTitle.trim(),content:itemCon.trim(),files:fls,sortOrder:order});
-    sToast(editItem?'已更新':'已新增');setAddItemTopic(null);setItemTitle('');setItemCon('');setItemFiles([]);setEditItem(null);await loadData();}catch(e){sToast('儲存失敗');}setSaving(false);};
+  const saveItemFn=()=>{if(!itemTitle.trim()||!addItemTopic||busy.current)return;busy.current=true;
+    const tId=addItemTopic,ti=itemTitle.trim(),co=itemCon.trim(),fls=[...itemFiles];
+    const tp=topics.find(t=>t.id===tId);const order=tp?tp.items.length:0;
+    if(editItem){
+      const old=tp?.items.find(i=>i.id===editItem);
+      setTopics(p=>p.map(t=>t.id===tId?{...t,items:t.items.map(i=>i.id===editItem?{...i,title:ti,content:co,files:fls}:i)}:t));
+      setAddItemTopic(null);setItemTitle('');setItemCon('');setItemFiles([]);setEditItem(null);sToast('已更新');
+      apiPost({action:'updateTopicItem',id:editItem,title:ti,content:co,files:fls,sortOrder:old?old.sortOrder:0}).then(()=>{busy.current=false;}).catch(()=>{busy.current=false;loadData();});
+    }else{
+      const tmpId='ti-'+Date.now(),ni={id:tmpId,topicId:tId,title:ti,content:co,files:fls,sortOrder:order};
+      setTopics(p=>p.map(t=>t.id===tId?{...t,items:[...t.items,ni]}:t));
+      setAddItemTopic(null);setItemTitle('');setItemCon('');setItemFiles([]);setEditItem(null);sToast('已新增');
+      apiPost({action:'addTopicItem',topicId:tId,title:ti,content:co,files:fls,sortOrder:order}).then(res=>{busy.current=false;if(res?.id)setTopics(p=>p.map(t=>({...t,items:t.items.map(i=>i.id===tmpId?{...i,id:res.id}:i)})));}).catch(()=>{busy.current=false;loadData();});
+    }};
   const moveItem=async(tId,iId,dir)=>{const tp=topics.find(t=>t.id===tId);if(!tp)return;
     const arr=[...tp.items],idx=arr.findIndex(i=>i.id===iId);if(idx<0)return;const nIdx=idx+dir;if(nIdx<0||nIdx>=arr.length)return;
     [arr[idx],arr[nIdx]]=[arr[nIdx],arr[idx]];
-    const reorder=arr.map((item,i)=>({id:item.id,sortOrder:i}));
-    try{await apiPost({action:'reorderTopicItems',items:reorder});await loadData();}catch(e){sToast('排序失敗');}};
-  const delItem=async(tId,iId)=>{if(saving)return;setSaving(true);
-    try{await apiPost({action:'deleteTopicItem',id:iId});sToast('已刪除');await loadData();}catch(e){sToast('刪除失敗');}setSaving(false);};
+    const reorder=arr.map((item,i)=>({...item,sortOrder:i}));
+    setTopics(p=>p.map(t=>t.id===tId?{...t,items:reorder}:t));
+    apiPost({action:'reorderTopicItems',items:reorder.map(i=>({id:i.id,sortOrder:i.sortOrder}))}).catch(()=>loadData());};
+  const delItem=(tId,iId)=>{setTopics(p=>p.map(t=>t.id===tId?{...t,items:t.items.filter(i=>i.id!==iId)}:t));vib();sToast('已刪除');apiPost({action:'deleteTopicItem',id:iId}).catch(()=>{sToast('刪除失敗');loadData();});};
 
   const VS=[{k:'schedule',l:'所有排期',ic:'cal'},{k:'duty',l:'Duty 日常',ic:'clipboard'},{k:'colleagues',l:'同事紀錄',ic:'users'},{k:'info',l:'公司需知',ic:'book'}];
 
@@ -388,7 +451,8 @@ function App(){
 
   const renderDutyItem=(d,i,arr)=>{
     const u=gU(d.dl,d.dlt,d.urgency);const isG=glowId===d.id;
-    return(<div key={d.id} className={'px-4 py-3.5 transition-colors duration-300 '+(i<arr.length-1?'border-b border-gray-700/50 ':'')+(isG?'bg-green-900/20':'')}>
+    return(<SwipeDel key={d.id} onDel={()=>delD(d.id)} bg="bg-gray-900">
+      <div className={'px-4 py-3.5 transition-colors duration-300 '+(i<arr.length-1?'border-b border-gray-700/50 ':'')+(isG?'bg-green-900/20':'')}>
       <div className="flex items-start gap-3">
         <button onClick={()=>togD(d.id)} disabled={!!glowId&&glowId!==d.id}
           className={'mt-0.5 w-7 h-7 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all duration-300 '+(isG?'bg-green-500 border-green-500 green-glow':'border-gray-600')}
@@ -403,58 +467,54 @@ function App(){
           {d.dl&&!isG&&<div className="flex items-center gap-3 flex-wrap mt-1.5"><span className="text-xs text-gray-500">{dd(d.dl)}{d.dlt&&` ${fT(d.dlt)}`}</span><span className={'text-xs '+(u.p<=1?'text-red-400':'text-gray-500')}>{rDL(d.dl,d.dlt)}</span></div>}
           {!isG&&<div className="flex items-center gap-3 mt-2">
             <button onClick={()=>editDFn(d)} className="text-xs text-gray-500 flex items-center gap-1"><Ic name="pencil" className="w-3 h-3"/>修改</button>
-            <button onClick={()=>delD(d.id)} className="text-xs text-gray-600 flex items-center gap-1"><Ic name="trash" className="w-3 h-3"/>刪除</button>
           </div>}
         </div>
         {!isG&&<div className={'w-2.5 h-2.5 rounded-full flex-shrink-0 mt-1.5 '+u.dot+(u.pu?' animate-pulse':'')}/>}
       </div>
-    </div>);
+    </div></SwipeDel>);
   };
 
-  /* ── 排期卡片渲染（活躍 + 已過期共用） ── */
+  /* ── Schedule card ── */
   const renderSchedCard=(ev,isComp)=>{
-    const gs=groupC(ev.dates),tl=gTL(ev),tag=isComp?null:getSchedTag(ev.dates),isCp=copiedId===ev.id,isHold=holdingId===ev.id;
-    const daysLeft=isComp?schedDaysLeft(ev.dates):0;
-    return(<div key={ev.id}
-      onTouchStart={e=>onCardTS(ev,e)} onTouchMove={onCardTM} onTouchEnd={e=>onCardTE(ev,e)}
-      onMouseDown={()=>onCardMD(ev)} onMouseUp={()=>onCardMU(ev)}
-      className={'bg-gray-900 rounded-2xl border overflow-hidden cursor-pointer transition-all duration-200 active:scale-95 no-sel '
-        +(isCp?'border-green-600 ':isHold?'border-purple-500 card-hold ':'border-gray-800 ')
-        +(isComp?'opacity-50 ':'')}>
-      <div className="p-4">
-        <div className="flex items-start justify-between mb-2">
-          <div className="flex items-center gap-2 flex-1 min-w-0 flex-wrap">
-            <h3 className={'font-semibold '+(isComp?'line-through text-gray-500':'')}>{ev.name}</h3>
-            {tag&&<span className={'px-2 py-0.5 rounded-lg text-xs font-bold flex-shrink-0 '+(tag.pu?'animate-pulse ':'')+tag.cls}>{tag.lb}</span>}
-            {isComp&&<span className="px-2 py-0.5 rounded-lg text-xs bg-gray-700 text-gray-400 flex-shrink-0">已過期</span>}
+    const gs=groupC(ev.dates),tl=gTL(ev),tag=getSchedTag(ev.dates),isCp=copiedId===ev.id,isHold=holdingId===ev.id;
+    return(<SwipeDel key={ev.id} onDel={()=>delEv(ev.id)} rcls="rounded-2xl" bg="bg-gray-900">
+      <div
+        onTouchStart={e=>onCardTS(ev,e)} onTouchMove={onCardTM} onTouchEnd={e=>onCardTE(ev,e)}
+        onMouseDown={()=>onCardMD(ev)} onMouseUp={()=>onCardMU(ev)}
+        className={'bg-gray-900 rounded-2xl border overflow-hidden cursor-pointer no-sel '
+          +(isCp?'border-green-600 ':isHold?'border-purple-500 card-hold ':isComp?'border-gray-800/50 ':'border-gray-800 ')
+          +(isComp?'opacity-50 ':'')}>
+        <div className="p-4">
+          <div className="flex items-start justify-between mb-2">
+            <div className="flex items-center gap-2 flex-1 min-w-0 flex-wrap">
+              <h3 className={'font-semibold '+(isComp?'line-through text-gray-500':'')}>{ev.name}</h3>
+              {tag&&<span className={'px-2 py-0.5 rounded-lg text-xs font-bold flex-shrink-0 '+(tag.pu?'animate-pulse ':'')+tag.cls}>{tag.lb}</span>}
+            </div>
+            <div className="flex items-center gap-1 ml-2 flex-shrink-0">
+              {isCp&&<span className="text-xs text-green-400 flex items-center gap-1"><Ic name="check" className="w-3.5 h-3.5 text-green-400" sw={3}/>已複製</span>}
+              {isHold&&<span className="text-xs text-purple-400 flex items-center gap-1"><Ic name="pencil" className="w-3.5 h-3.5"/>修改中…</span>}
+            </div>
           </div>
-          <div className="flex items-center gap-1 ml-2 flex-shrink-0">
-            {isCp&&<span className="text-xs text-green-400 flex items-center gap-1"><Ic name="check" className="w-3.5 h-3.5 text-green-400" sw={3}/>已複製</span>}
-            {isHold&&<span className="text-xs text-purple-400 flex items-center gap-1"><Ic name="pencil" className="w-3.5 h-3.5"/>修改中…</span>}
-            <button onClick={e=>{e.stopPropagation();delEv(ev.id);}} onTouchStart={e=>e.stopPropagation()} className="p-1.5 rounded-lg hover:bg-gray-800 text-gray-600"><Ic name="trash" className="w-4 h-4"/></button>
+          <div className="flex items-center gap-2 mb-3 flex-wrap">
+            <span className="text-xs text-purple-400">共{ev.dates.length}日</span>
+            {tl&&<span className="text-xs bg-purple-900/50 text-purple-300 px-2 py-0.5 rounded-lg flex items-center gap-1"><Ic name="clock" className="w-3 h-3"/>{tl}</span>}
           </div>
+          <div className="space-y-2">{gs.map((g,gi)=><div key={gi}>{g.length>1?
+            <div className="flex items-center gap-2 bg-purple-900/30 rounded-xl px-3 py-2"><div className="w-2 h-2 rounded-full bg-purple-400"/><span className="text-sm text-purple-200">{sd(g[0])} → {sd(g[g.length-1])}</span><span className="text-xs text-purple-400 ml-auto">連續{g.length}日</span></div>:
+            <div className="flex items-center gap-2 bg-gray-800 rounded-xl px-3 py-2"><div className="w-2 h-2 rounded-full bg-amber-400"/><span className="text-sm text-gray-200">{dd(g[0])}</span><span className="text-xs text-amber-400 ml-auto">單日</span></div>}</div>)}</div>
+          <div className="mt-3 pt-3 border-t border-gray-800"><div className="flex gap-1 flex-wrap">{ev.dates.map((d,i)=>{
+            const pv=i>0?ev.dates[i-1]:null,isG=pv&&((pd(d)-pd(pv))/864e5)>1;
+            return<Fragment key={d}>{isG&&<div className="w-2"/>}<div className="flex flex-col items-center"><div className={'w-8 h-8 rounded-lg flex items-center justify-center text-xs font-medium '+(isG?'bg-amber-900/40 text-amber-300':'bg-purple-900/50 text-purple-200')}>{pd(d).getDate()}</div><span className="text-xs text-gray-600 mt-0.5">{WD[pd(d).getDay()]}</span></div></Fragment>;
+          })}</div></div>
         </div>
-        {isComp&&<div className="text-xs text-gray-600 mb-2 flex items-center gap-1"><Ic name="clock" className="w-3 h-3"/>{daysLeft>0?`${daysLeft}日後自動清除`:'即將自動清除'}</div>}
-        <div className="flex items-center gap-2 mb-3 flex-wrap">
-          <span className="text-xs text-purple-400">共{ev.dates.length}日</span>
-          {tl&&<span className="text-xs bg-purple-900/50 text-purple-300 px-2 py-0.5 rounded-lg flex items-center gap-1"><Ic name="clock" className="w-3 h-3"/>{tl}</span>}
-        </div>
-        <div className="space-y-2">{gs.map((g,gi)=><div key={gi}>{g.length>1?
-          <div className="flex items-center gap-2 bg-purple-900/30 rounded-xl px-3 py-2"><div className="w-2 h-2 rounded-full bg-purple-400"/><span className="text-sm text-purple-200">{sd(g[0])} → {sd(g[g.length-1])}</span><span className="text-xs text-purple-400 ml-auto">連續{g.length}日</span></div>:
-          <div className="flex items-center gap-2 bg-gray-800 rounded-xl px-3 py-2"><div className="w-2 h-2 rounded-full bg-amber-400"/><span className="text-sm text-gray-200">{dd(g[0])}</span><span className="text-xs text-amber-400 ml-auto">單日</span></div>}</div>)}</div>
-        <div className="mt-3 pt-3 border-t border-gray-800"><div className="flex gap-1 flex-wrap">{ev.dates.map((d,i)=>{
-          const pv=i>0?ev.dates[i-1]:null,isG=pv&&((pd(d)-pd(pv))/864e5)>1;
-          return<Fragment key={d}>{isG&&<div className="w-2"/>}<div className="flex flex-col items-center"><div className={'w-8 h-8 rounded-lg flex items-center justify-center text-xs font-medium '+(isG?'bg-amber-900/40 text-amber-300':'bg-purple-900/50 text-purple-200')}>{pd(d).getDate()}</div><span className="text-xs text-gray-600 mt-0.5">{WD[pd(d).getDay()]}</span></div></Fragment>;
-        })}</div></div>
       </div>
-    </div>);
+    </SwipeDel>);
   };
 
-  /* ── LOADING SCREEN ── */
+  /* ── LOADING ── */
   if(loading)return(<div className="min-h-screen bg-gray-950 flex items-center justify-center">
     <div className="text-center"><div className="w-10 h-10 border-4 border-purple-500 border-t-transparent rounded-full spinner mx-auto mb-3"/><p className="text-gray-400 text-sm">載入中...</p></div>
   </div>);
-
   if(loadErr&&!events.length&&!duties.length&&!cols.length&&!topics.length)return(<div className="min-h-screen bg-gray-950 flex items-center justify-center">
     <div className="text-center"><Ic name="alert" className="w-12 h-12 text-red-400 mx-auto mb-3"/><p className="text-gray-400 mb-4">載入失敗</p>
     <button onClick={()=>{setLoading(true);loadData();}} className="bg-purple-600 text-white px-6 py-2.5 rounded-xl text-sm font-medium">重試</button></div>
@@ -464,7 +524,6 @@ function App(){
   <div className="min-h-screen bg-gray-950 text-white p-4 max-w-lg mx-auto" style={{overscrollBehavior:'contain'}}>
     {toast&&<div className="fixed top-4 left-1/2 z-50 px-5 py-3 rounded-2xl shadow-lg bg-green-600 text-white text-sm font-medium flex items-center gap-2" style={{transform:'translateX(-50%)'}}><Ic name="check" className="w-4 h-4" sw={3}/>{toast}</div>}
     {showDD&&<div onClick={()=>setShowDD(false)} className="fixed inset-0 z-30"/>}
-
     {previewImg&&<div onClick={()=>setPreviewImg(null)} className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center p-4" style={{touchAction:'none'}}>
       <button onClick={()=>setPreviewImg(null)} className="absolute top-4 right-4 w-10 h-10 rounded-full bg-gray-800/80 flex items-center justify-center z-10"><Ic name="x" className="w-6 h-6 text-white"/></button>
       <img src={previewImg} onClick={e=>e.stopPropagation()} className="max-w-full max-h-full object-contain rounded-lg"/>
@@ -526,26 +585,24 @@ function App(){
           <div className="flex items-center justify-between mb-2"><span className="text-sm text-gray-400">已選 {sel.length} 日</span><button onClick={()=>setSel([])} className="text-xs text-red-400 flex items-center gap-1"><Ic name="trash" className="w-3 h-3"/>清除</button></div>
           <div className="flex flex-wrap gap-1.5">{sel.map(d=><span key={d} className="bg-purple-900/50 text-purple-200 px-2.5 py-1 rounded-lg text-xs flex items-center gap-1">{dd(d)}<button onClick={()=>setSel(p=>p.filter(x=>x!==d))} className="text-purple-400 hover:text-red-400"><Ic name="x" className="w-3 h-3"/></button></span>)}</div>
         </div>}
-        <button onClick={saveEv} disabled={!eName.trim()||!sel.length||saving} className="w-full py-3 rounded-xl font-semibold text-sm bg-purple-600 disabled:bg-gray-700 disabled:text-gray-500">{saving?'儲存中...':editId?'更新排期':'儲存排期'}</button>
+        <button onClick={saveEv} disabled={!eName.trim()||!sel.length} className="w-full py-3 rounded-xl font-semibold text-sm bg-purple-600 disabled:bg-gray-700 disabled:text-gray-500">{editId?'更新排期':'儲存排期'}</button>
       </div>}
 
-      {/* ✅ Summary 提示 bar */}
       {!showForm&&(schedSum.tC>0||schedSum.mC>0||schedSum.wC>0)&&<div className="bg-gray-900/80 border border-gray-800 rounded-xl px-4 py-3 mb-4 text-sm no-sel">
         {(schedSum.tC>0||schedSum.mC>0)&&<div className="flex items-center gap-3 flex-wrap">{schedSum.tC>0&&<span className="text-red-300 font-medium">⚡ 今日 {schedSum.tC} 個排期</span>}{schedSum.mC>0&&<span className="text-orange-300 font-medium">📌 聽日 {schedSum.mC} 個排期</span>}</div>}
         {schedSum.wC>0&&<div className={(schedSum.tC>0||schedSum.mC>0)?'text-gray-500 text-xs mt-1':'text-gray-400'}>📅 本週共 {schedSum.wC} 個排期</div>}
       </div>}
 
-      {!showForm&&activeEvs.length>0&&<div className="text-xs text-gray-500 bg-gray-900/50 rounded-xl px-3 py-2 mb-4 text-center no-sel">📋 㩒一下＝直接Copy ｜ 長㩒0.5秒＝修改</div>}
+      {!showForm&&activeEvs.length>0&&<div className="text-xs text-gray-500 bg-gray-900/50 rounded-xl px-3 py-2 mb-4 text-center no-sel">📋 㩒一下＝直接Copy ｜ 長㩒0.7秒＝修改 ｜ ⬅️ 左拉＝刪除</div>}
 
       <div className="space-y-4">
         {activeEvs.length===0&&compEvs.length===0&&!showForm&&<div className="text-center text-gray-500 py-16"><Ic name="cal" className="w-12 h-12 mx-auto mb-3 opacity-30"/><p>未有排期紀錄</p></div>}
         {activeEvs.map(ev=>renderSchedCard(ev,false))}
       </div>
 
-      {/* ✅ 已過期排期 (collapsible) */}
       {compEvs.length>0&&<div className="mt-6">
         <button onClick={()=>setShowSchedDone(!showSchedDone)} className="flex items-center gap-2 mb-3 px-1 text-sm font-semibold text-gray-500 w-full no-sel">
-          <Ic name="check" className="w-4 h-4 text-green-600"/>已過期<span className="text-xs text-gray-600">{compEvs.length}</span><span className="text-xs text-gray-700 ml-1">· 5日後自動清除</span><Ic name="down" className={'w-4 h-4 ml-auto transition-transform '+(showSchedDone?'rotate-180':'')}/>
+          <Ic name="check" className="w-4 h-4 text-green-600"/>已過期<span className="text-xs text-gray-600">{compEvs.length}</span><Ic name="down" className={'w-4 h-4 ml-auto transition-transform '+(showSchedDone?'rotate-180':'')}/>
         </button>
         {showSchedDone&&<div className="space-y-4">{compEvs.map(ev=>renderSchedCard(ev,true))}</div>}
       </div>}
@@ -577,7 +634,7 @@ function App(){
             {o.l}
           </button>)}
         </div>
-        <button onClick={saveD} disabled={!dTitle.trim()||saving} className="w-full py-3 rounded-xl font-semibold text-sm bg-purple-600 disabled:bg-gray-700 disabled:text-gray-500">{saving?'儲存中...':editDId?'更新':'新增'}</button>
+        <button onClick={saveD} disabled={!dTitle.trim()} className="w-full py-3 rounded-xl font-semibold text-sm bg-purple-600 disabled:bg-gray-700 disabled:text-gray-500">{editDId?'更新':'新增'}</button>
       </div>}
       {actD.length===0&&!showDF&&doneD.length===0&&<div className="text-center text-gray-500 py-16"><Ic name="clipboard" className="w-12 h-12 mx-auto mb-3 opacity-30"/><p>未有事項</p></div>}
       {dlD.length>0&&<div className="mb-5">
@@ -592,18 +649,18 @@ function App(){
         <button onClick={()=>setShowDone(!showDone)} className="flex items-center gap-2 mb-3 px-1 text-sm font-semibold text-gray-500 w-full no-sel">
           <Ic name="check" className="w-4 h-4 text-green-600"/>已完成<span className="text-xs text-gray-600">{doneD.length}</span><Ic name="down" className={'w-4 h-4 ml-auto transition-transform '+(showDone?'rotate-180':'')}/>
         </button>
-        {showDone&&<div className="bg-gray-900 rounded-2xl border border-gray-800 overflow-hidden">{doneD.map((d,i)=><div key={d.id} className={'px-4 py-3.5 opacity-50 '+(i<doneD.length-1?'border-b border-gray-700/50':'')}>
-          <div className="flex items-start gap-3">
-            <button onClick={()=>togD(d.id)} className="mt-0.5 w-7 h-7 rounded-full bg-green-500 border-2 border-green-500 flex items-center justify-center flex-shrink-0"><Ic name="check" className="w-4 h-4 text-white" sw={3}/></button>
-            <div className="flex-1 min-w-0">
-              <h3 className="font-semibold text-sm line-through text-gray-500">{d.title}</h3>
-              <div className="flex items-center gap-3 mt-2">
-                <button onClick={()=>togD(d.id)} className="text-xs text-gray-500 flex items-center gap-1"><Ic name="undo" className="w-3 h-3"/>恢復</button>
-                <button onClick={()=>delD(d.id)} className="text-xs text-gray-600 flex items-center gap-1"><Ic name="trash" className="w-3 h-3"/>刪除</button>
+        {showDone&&<div className="bg-gray-900 rounded-2xl border border-gray-800 overflow-hidden">{doneD.map((d,i)=>(
+          <SwipeDel key={d.id} onDel={()=>delD(d.id)} bg="bg-gray-900">
+            <div className={'px-4 py-3.5 opacity-50 '+(i<doneD.length-1?'border-b border-gray-700/50':'')}>
+              <div className="flex items-start gap-3">
+                <button onClick={()=>togD(d.id)} className="mt-0.5 w-7 h-7 rounded-full bg-green-500 border-2 border-green-500 flex items-center justify-center flex-shrink-0"><Ic name="check" className="w-4 h-4 text-white" sw={3}/></button>
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-semibold text-sm line-through text-gray-500">{d.title}</h3>
+                  <p className="text-xs text-gray-600 mt-1">㩒圓圈恢復 ｜ ⬅️左拉刪除</p>
+                </div>
               </div>
             </div>
-          </div>
-        </div>)}</div>}
+          </SwipeDel>))}</div>}
       </div>}
     </div>}
 
@@ -613,12 +670,14 @@ function App(){
         <div className="flex items-center justify-between mb-3"><h3 className="font-semibold">新增同事</h3><button onClick={()=>{setShowAddCol(false);setNewCol('');}}><Ic name="x" className="w-5 h-5 text-gray-500"/></button></div>
         <div className="flex gap-2">
           <input type="text" placeholder="同事名" value={newCol} onChange={e=>setNewCol(e.target.value)} {...dp} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();addColFn();e.target.blur();}}} className="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:border-purple-500"/>
-          <button onClick={addColFn} disabled={!newCol.trim()||saving} className="bg-purple-600 disabled:bg-gray-700 disabled:text-gray-500 text-white px-5 py-2.5 rounded-xl font-medium text-sm">{saving?'...':'確認'}</button>
+          <button onClick={addColFn} disabled={!newCol.trim()} className="bg-purple-600 disabled:bg-gray-700 disabled:text-gray-500 text-white px-5 py-2.5 rounded-xl font-medium text-sm">確認</button>
         </div>
       </div>}
       <div className="space-y-4">
         {cols.length===0&&!showAddCol&&<div className="text-center text-gray-500 py-16"><Ic name="users" className="w-12 h-12 mx-auto mb-3 opacity-30"/><p>未有同事紀錄</p></div>}
-        {cols.map(c=>{const isE=expCol===c.id,isA=addRecCol===c.id;return<div key={c.id} className="bg-gray-900 rounded-2xl border border-gray-800 overflow-hidden">
+        {cols.map(c=>{const isE=expCol===c.id,isA=addRecCol===c.id;return(
+          <SwipeDel key={c.id} onDel={()=>delCol(c.id)} rcls="rounded-2xl" bg="bg-gray-900">
+          <div className="bg-gray-900 rounded-2xl border border-gray-800 overflow-hidden">
           <div onClick={()=>setExpCol(isE?null:c.id)} className="flex items-center justify-between p-4 cursor-pointer no-sel">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-full bg-purple-900/50 flex items-center justify-center text-purple-300 font-bold">{c.name[0]}</div>
@@ -626,7 +685,6 @@ function App(){
             </div>
             <div className="flex items-center gap-1">
               <button onClick={e=>{e.stopPropagation();openAR(c.id);setExpCol(c.id);}} className="p-2 text-purple-400"><Ic name="plus" className="w-4 h-4"/></button>
-              <button onClick={e=>{e.stopPropagation();delCol(c.id);}} className="p-2 text-gray-600"><Ic name="trash" className="w-4 h-4"/></button>
               <Ic name="down" className={'w-4 h-4 text-gray-500 transition-transform '+(isE?'rotate-180':'')}/>
             </div>
           </div>
@@ -641,13 +699,14 @@ function App(){
               {renderUploadArea(recFiles,setRecFiles,fileInpRec,'purple')}
               <div className="flex gap-2">
                 <button onClick={()=>{setAddRecCol(null);setEditRec(null);setRecFiles([]);}} className="flex-1 py-2 rounded-lg text-sm text-gray-400 bg-gray-700">取消</button>
-                <button onClick={saveR} disabled={!recTxt.trim()||saving} className="flex-1 py-2 rounded-lg text-sm font-medium bg-purple-600 disabled:bg-gray-700 disabled:text-gray-500">{saving?'...':editRec?'更新':'儲存'}</button>
+                <button onClick={saveR} disabled={!recTxt.trim()} className="flex-1 py-2 rounded-lg text-sm font-medium bg-purple-600 disabled:bg-gray-700 disabled:text-gray-500">{editRec?'更新':'儲存'}</button>
               </div>
             </div>}
             {c.records.length===0&&!isA&&<div className="text-center text-gray-500 py-6 text-sm">未有紀錄</div>}
             {c.records.length>0&&<div className="bg-gray-800 rounded-xl overflow-hidden">{c.records.map((r,ri)=>{
               const hasFiles=r.files&&r.files.length>0;const singleFile=hasFiles&&r.files.length===1;
-              return<div key={r.id} className={'px-4 py-3 '+(ri<c.records.length-1?'border-b border-gray-700/50':'')}>
+              return(<SwipeDel key={r.id} onDel={()=>delRec(c.id,r.id)} bg="bg-gray-800">
+              <div className={'px-4 py-3 '+(ri<c.records.length-1?'border-b border-gray-700/50':'')}>
               {(r.date||r.time)&&<div className="text-xs text-purple-300 mb-1.5 flex items-center gap-1"><Ic name="cal" className="w-3 h-3"/>{r.date&&dd(r.date)}{r.time&&` ${fT(r.time)}`}</div>}
               {singleFile?
                 <div className="flex gap-3 items-start">
@@ -660,12 +719,11 @@ function App(){
               </div>}
               <div className="mt-2 flex items-center gap-3">
                 <button onClick={()=>openER(c.id,r)} className="text-xs text-gray-500 flex items-center gap-1"><Ic name="pencil" className="w-3 h-3"/>修改</button>
-                <button onClick={()=>delRec(c.id,r.id)} className="text-xs text-gray-600 flex items-center gap-1"><Ic name="trash" className="w-3 h-3"/>刪除</button>
               </div>
-            </div>})}</div>}
+            </div></SwipeDel>)})}</div>}
             {!isA&&<button onClick={()=>openAR(c.id)} className="w-full mt-3 py-2.5 rounded-xl text-sm text-purple-400 border border-dashed border-gray-700 flex items-center justify-center gap-1"><Ic name="plus" className="w-3.5 h-3.5"/>新增紀錄</button>}
           </div>}
-        </div>;})}
+          </div></SwipeDel>);})}
       </div>
     </div>}
 
@@ -675,12 +733,14 @@ function App(){
         <div className="flex items-center justify-between mb-3"><h3 className="font-semibold">新增分類</h3><button onClick={()=>{setShowAddTopic(false);setNewTopic('');}}><Ic name="x" className="w-5 h-5 text-gray-500"/></button></div>
         <div className="flex gap-2">
           <input type="text" placeholder="分類名稱（如：請假、IT）" value={newTopic} onChange={e=>setNewTopic(e.target.value)} {...dp} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();addTopicFn();e.target.blur();}}} className="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:border-purple-500"/>
-          <button onClick={addTopicFn} disabled={!newTopic.trim()||saving} className="bg-purple-600 disabled:bg-gray-700 disabled:text-gray-500 text-white px-5 py-2.5 rounded-xl font-medium text-sm">{saving?'...':'確認'}</button>
+          <button onClick={addTopicFn} disabled={!newTopic.trim()} className="bg-purple-600 disabled:bg-gray-700 disabled:text-gray-500 text-white px-5 py-2.5 rounded-xl font-medium text-sm">確認</button>
         </div>
       </div>}
       <div className="space-y-4">
         {topics.length===0&&!showAddTopic&&<div className="text-center text-gray-500 py-16"><Ic name="book" className="w-12 h-12 mx-auto mb-3 opacity-30"/><p>未有公司需知紀錄</p></div>}
-        {topics.map(tp=>{const isE=expTopic===tp.id,isA=addItemTopic===tp.id;return<div key={tp.id} className="bg-gray-900 rounded-2xl border border-gray-800 overflow-hidden">
+        {topics.map(tp=>{const isE=expTopic===tp.id,isA=addItemTopic===tp.id;return(
+          <SwipeDel key={tp.id} onDel={()=>delTopic(tp.id)} rcls="rounded-2xl" bg="bg-gray-900">
+          <div className="bg-gray-900 rounded-2xl border border-gray-800 overflow-hidden">
           <div onClick={()=>setExpTopic(isE?null:tp.id)} className="flex items-center justify-between p-4 cursor-pointer no-sel">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-full bg-blue-900/50 flex items-center justify-center text-blue-300 font-bold"><Ic name="book" className="w-5 h-5"/></div>
@@ -688,7 +748,6 @@ function App(){
             </div>
             <div className="flex items-center gap-1">
               <button onClick={e=>{e.stopPropagation();openAI(tp.id);setExpTopic(tp.id);}} className="p-2 text-blue-400"><Ic name="plus" className="w-4 h-4"/></button>
-              <button onClick={e=>{e.stopPropagation();delTopic(tp.id);}} className="p-2 text-gray-600"><Ic name="trash" className="w-4 h-4"/></button>
               <Ic name="down" className={'w-4 h-4 text-gray-500 transition-transform '+(isE?'rotate-180':'')}/>
             </div>
           </div>
@@ -700,13 +759,14 @@ function App(){
               {renderUploadArea(itemFiles,setItemFiles,fileInpItem,'blue')}
               <div className="flex gap-2">
                 <button onClick={()=>{setAddItemTopic(null);setEditItem(null);setItemFiles([]);}} className="flex-1 py-2 rounded-lg text-sm text-gray-400 bg-gray-700">取消</button>
-                <button onClick={saveItemFn} disabled={!itemTitle.trim()||saving} className="flex-1 py-2 rounded-lg text-sm font-medium bg-blue-600 disabled:bg-gray-700 disabled:text-gray-500">{saving?'...':editItem?'更新':'儲存'}</button>
+                <button onClick={saveItemFn} disabled={!itemTitle.trim()} className="flex-1 py-2 rounded-lg text-sm font-medium bg-blue-600 disabled:bg-gray-700 disabled:text-gray-500">{editItem?'更新':'儲存'}</button>
               </div>
             </div>}
             {tp.items.length===0&&!isA&&<div className="text-center text-gray-500 py-6 text-sm">未有資訊</div>}
             {tp.items.length>0&&<div className="bg-gray-800 rounded-xl overflow-hidden">{tp.items.map((it,ii)=>{
               const hasFiles=it.files&&it.files.length>0;const singleFile=hasFiles&&it.files.length===1;
-              return<div key={it.id} className={'px-4 py-3 '+(ii<tp.items.length-1?'border-b border-gray-700/50':'')}>
+              return(<SwipeDel key={it.id} onDel={()=>delItem(tp.id,it.id)} bg="bg-gray-800">
+              <div className={'px-4 py-3 '+(ii<tp.items.length-1?'border-b border-gray-700/50':'')}>
               <div className="flex items-start gap-2">
                 <div className="flex-1 min-w-0">
                   {singleFile?
@@ -730,17 +790,15 @@ function App(){
               </div>
               <div className="mt-2 flex items-center gap-3">
                 <button onClick={()=>openEI(tp.id,it)} className="text-xs text-gray-500 flex items-center gap-1"><Ic name="pencil" className="w-3 h-3"/>修改</button>
-                <button onClick={()=>delItem(tp.id,it.id)} className="text-xs text-gray-600 flex items-center gap-1"><Ic name="trash" className="w-3 h-3"/>刪除</button>
               </div>
-            </div>})}</div>}
+            </div></SwipeDel>)})}</div>}
             {!isA&&<button onClick={()=>openAI(tp.id)} className="w-full mt-3 py-2.5 rounded-xl text-sm text-blue-400 border border-dashed border-gray-700 flex items-center justify-center gap-1"><Ic name="plus" className="w-3.5 h-3.5"/>新增資訊</button>}
           </div>}
-        </div>;})}
+          </div></SwipeDel>);})}
       </div>
     </div>}
   </div>);
 }
-
 ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
 </script>
 </body>
