@@ -251,8 +251,8 @@ function App(){
   const loadData=useCallback(async(showToast)=>{
     try{
       const d=await apiGet();
-      setEvents((d.schedules||[]).map(s=>({id:s.id,name:s.name,dates:Array.isArray(s.dates)?s.dates:[],st:s.st||'',et:s.et||''})));
-      setDuties((d.duties||[]).map(x=>({id:x.id,title:x.title,content:x.content||'',dl:x.dl||'',dlt:x.dlt||'',urgency:x.urgency||'',done:x.done===true||x.done==='true',dAt:x.dAt||null})));
+      setEvents((d.schedules||[]).map(s=>({id:s.id,name:s.name,dates:Array.isArray(s.dates)?s.dates:[],st:s.startTime||'',et:s.endTime||''})));
+      setDuties((d.duties||[]).map(x=>({id:x.id,title:x.title,content:x.content||'',dl:x.deadline||'',dlt:x.deadlineTime||'',urgency:x.urgency||'',done:x.done===true||x.done==='true',dAt:x.doneAt||null})));
       const recs=(d.records||[]).map(r=>({...r,files:Array.isArray(r.files)?r.files:[]}));
       setCols((d.colleagues||[]).map(c=>({id:c.id,name:c.name,records:recs.filter(r=>String(r.colleagueId)===String(c.id)).sort((a,b)=>((b.date||'')+(b.time||'')).localeCompare((a.date||'')+(a.time||'')))})));
       const items=(d.topicItems||[]).map(i=>({...i,files:Array.isArray(i.files)?i.files:[],sortOrder:Number(i.sortOrder)||0}));
@@ -328,7 +328,6 @@ function App(){
   useEffect(()=>{const mm=()=>{if(!cardMoved.current){cardMoved.current=true;clearTimeout(cardTmr.current);}};window.addEventListener('mousemove',mm);return()=>window.removeEventListener('mousemove',mm);},[]);
   const onCardMU=(ev)=>{clearTimeout(cardTmr.current);cardTmr.current=null;if(cardTriggered.current)return;if(!cardMoved.current){doCopy(ev);}};
 
-  /* ── FIX: edit 用 delete+add 代替 updateSchedule ── */
   const saveEv=()=>{if(!eName.trim()||!sel.length||busy.current)return;busy.current=true;
     const nm=eName.trim(),ds=[...sel],st=sTime,et=eTime;
     if(editId){
@@ -336,7 +335,7 @@ function App(){
       setEvents(p=>p.map(e=>e.id===oldId?{...e,name:nm,dates:ds,st,et}:e));
       resetF();sToast('已更新');
       apiPost({action:'deleteSchedule',id:oldId}).then(()=>{
-        return apiPost({action:'addSchedule',name:nm,dates:ds,st,et});
+        return apiPost({action:'addSchedule',name:nm,dates:ds,startTime:st,endTime:et});
       }).then(res=>{
         busy.current=false;
         if(res?.id)setEvents(p=>p.map(e=>e.id===oldId?{...e,id:res.id}:e));
@@ -345,7 +344,7 @@ function App(){
       const tmpId='ts-'+Date.now();
       setEvents(p=>[...p,{id:tmpId,name:nm,dates:ds,st,et}]);
       resetF();sToast('已儲存');
-      apiPost({action:'addSchedule',name:nm,dates:ds,st,et}).then(res=>{busy.current=false;if(res?.id)setEvents(p=>p.map(e=>e.id===tmpId?{...e,id:res.id}:e));}).catch(()=>{busy.current=false;sToast('同步失敗');loadData();});
+      apiPost({action:'addSchedule',name:nm,dates:ds,startTime:st,endTime:et}).then(res=>{busy.current=false;if(res?.id)setEvents(p=>p.map(e=>e.id===tmpId?{...e,id:res.id}:e));}).catch(()=>{busy.current=false;sToast('同步失敗');loadData();});
     }};
   const resetF=()=>{setShowForm(false);setSel([]);setEName('');setSTime('');setETime('');setEditId(null);};
   const delEv=id=>{setEvents(p=>p.filter(e=>e.id!==id));vib();sToast('已刪除');apiPost({action:'deleteSchedule',id}).catch(()=>{sToast('刪除失敗');loadData();});};
@@ -356,20 +355,20 @@ function App(){
     if(editDId){
       setDuties(p=>p.map(d=>d.id===editDId?{...d,title:ti,content:co,dl,dlt,urgency:urg}:d));
       resetDF();sToast('已更新');
-      apiPost({action:'updateDuty',id:editDId,title:ti,content:co,dl,dlt,urgency:urg}).then(()=>{busy.current=false;}).catch(()=>{busy.current=false;loadData();});
+      apiPost({action:'updateDuty',id:editDId,title:ti,content:co,deadline:dl,deadlineTime:dlt,urgency:urg}).then(()=>{busy.current=false;}).catch(()=>{busy.current=false;loadData();});
     }else{
       const tmpId='td-'+Date.now();
       setDuties(p=>[...p,{id:tmpId,title:ti,content:co,dl,dlt,urgency:urg,done:false,dAt:null}]);
       resetDF();sToast('已新增');
-      apiPost({action:'addDuty',title:ti,content:co,dl,dlt,urgency:urg}).then(res=>{busy.current=false;if(res?.id)setDuties(p=>p.map(d=>d.id===tmpId?{...d,id:res.id}:d));}).catch(()=>{busy.current=false;loadData();});
+      apiPost({action:'addDuty',title:ti,content:co,deadline:dl,deadlineTime:dlt,urgency:urg}).then(res=>{busy.current=false;if(res?.id)setDuties(p=>p.map(d=>d.id===tmpId?{...d,id:res.id}:d));}).catch(()=>{busy.current=false;loadData();});
     }};
   const editDFn=d=>{setEditDId(d.id);setDTitle(d.title);setDCon(d.content||'');setDDL(d.dl||'');setDDLT(d.dlt||'');setDUrg(d.urgency||'');setShowDF(true);setTimeout(()=>formRef.current?.scrollIntoView({behavior:'smooth',block:'start'}),150);};
   const togD=id=>{const d=duties.find(x=>x.id===id);if(!d)return;
     if(!d.done){if(glowId)return;vib([40,30,40]);setGlowId(id);sToast('已完成 ✓');
       setTimeout(()=>{setDuties(p=>p.map(x=>x.id===id?{...x,done:true,dAt:new Date().toISOString()}:x));setGlowId(null);setShowDone(true);},700);
-      apiPost({action:'toggleDuty',id,done:true,dAt:new Date().toISOString()}).catch(()=>loadData());
+      apiPost({action:'toggleDuty',id,done:true,doneAt:new Date().toISOString()}).catch(()=>loadData());
     }else{setDuties(p=>p.map(x=>x.id===id?{...x,done:false,dAt:''}:x));vib();sToast('已恢復');
-      apiPost({action:'toggleDuty',id,done:false,dAt:''}).catch(()=>{sToast('操作失敗');loadData();});}};
+      apiPost({action:'toggleDuty',id,done:false,doneAt:''}).catch(()=>{sToast('操作失敗');loadData();});}};
   const delD=id=>{setDuties(p=>p.filter(d=>d.id!==id));vib();sToast('已刪除');apiPost({action:'deleteDuty',id}).catch(()=>{sToast('刪除失敗');loadData();});};
 
   const addColFn=()=>{if(!newCol.trim()||busy.current)return;busy.current=true;
