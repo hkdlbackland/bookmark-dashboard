@@ -67,9 +67,10 @@ const WE=['sun','mon','tue','wed','thu','fri','sat'];
 const MO=['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
 const fmt=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 const pd=s=>new Date(s+'T00:00:00');
-const dd=s=>{const d=pd(s);return`${d.getMonth()+1}/${d.getDate()}（${WD[d.getDay()]}）`;};
-const cd=s=>{const d=pd(s);return`${d.getMonth()+1}/${d.getDate()}（${WE[d.getDay()]}）`;};
-const sd=s=>{const d=pd(s);return`${d.getMonth()+1}/${d.getDate()}`;};
+/* ✅ 年份顯示 */
+const dd=s=>{const d=pd(s);return`${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()}（${WD[d.getDay()]}）`;};
+const cd=s=>{const d=pd(s);return`${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()}（${WE[d.getDay()]}）`;};
+const sd=s=>{const d=pd(s);return`${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()}`;};
 function getRange(a,b){const s=pd(a),e=pd(b),f=s<e?s:e,t=s<e?e:s,r=[],c=new Date(f);while(c<=t){r.push(fmt(c));c.setDate(c.getDate()+1);}return r;}
 function groupC(dates){if(!dates.length)return[];const s=[...dates].sort(),g=[];let c=[s[0]];for(let i=1;i<s.length;i++){if((pd(s[i])-pd(s[i-1]))/864e5===1)c.push(s[i]);else{g.push(c);c=[s[i]];}}g.push(c);return g;}
 function fT(t){if(!t)return'';const[h,m]=t.split(':'),hh=+h;return`${hh===0?12:hh>12?hh-12:hh}:${m}${hh>=12?'PM':'AM'}`;}
@@ -77,7 +78,11 @@ function bCopy(ev){const g=groupC(ev.dates),l=[`📌 ${ev.name}`];if(ev.st&&ev.e
 function vib(p){try{navigator.vibrate?.(p||[50,30,50]);}catch(e){}}
 function gTL(ev){if(ev.st&&ev.et)return`${fT(ev.st)}–${fT(ev.et)}`;if(ev.st)return fT(ev.st);if(ev.et)return`${fT(ev.et)} off`;return'';}
 
-/* ✅ 改1: gU 加第3個參數 urg — 手動緊急度覆蓋自動計算 */
+/* ✅ 排期提醒 tag */
+function getSchedTag(dates){const now=new Date();now.setHours(0,0,0,0);const ts=fmt(now);const fut=dates.filter(d=>d>=ts).sort();if(!fut.length)return null;const diff=Math.round((pd(fut[0])-now)/864e5);if(diff===0)return{lb:'今日',cls:'bg-red-500 text-white',pu:true};if(diff===1)return{lb:'聽日',cls:'bg-orange-500 text-white',pu:false};if(diff===2)return{lb:'後日',cls:'bg-yellow-500 text-gray-900',pu:false};if(diff<=7)return{lb:'剩'+diff+'日',cls:'bg-blue-500/80 text-white',pu:false};return null;}
+/* ✅ 已過期倒數 */
+function schedDaysLeft(dates){const t=new Date();t.setHours(0,0,0,0);const l=[...dates].sort().pop();if(!l)return 0;return Math.max(0,6-Math.round((t-pd(l))/864e5));}
+
 function gU(dl,dlt,urg){
   if(urg==='urgent')return{lb:'緊急',dot:'bg-red-500',bg:'bg-red-900/40 text-red-300',p:-1,pu:true};
   if(urg==='high')return{lb:'重要',dot:'bg-orange-400',bg:'bg-orange-900/30 text-orange-300',p:0.5,pu:false};
@@ -136,7 +141,6 @@ function TimeBtn({value,onChange,onClear,disabled}){
 
 const dp={enterKeyHint:'done',onKeyDown:e=>{if(e.key==='Enter'){e.preventDefault();e.target.blur();}}};
 
-/* ── 緊急度選項 ── */
 const URG_OPTS=[
   {k:'',l:'自動',ac:'border-purple-600 bg-purple-900/50 text-purple-300'},
   {k:'urgent',l:'🔴 緊急',ac:'border-red-600 bg-red-900/50 text-red-300'},
@@ -190,8 +194,9 @@ function App(){
   const[dCon,setDCon]=useState('');
   const[dDL,setDDL]=useState('');
   const[dDLT,setDDLT]=useState('');
-  const[dUrg,setDUrg]=useState('');              /* ✅ 改2: 新增 urgency state */
+  const[dUrg,setDUrg]=useState('');
   const[showDone,setShowDone]=useState(false);
+  const[showSchedDone,setShowSchedDone]=useState(false);
   const[toast,setToast]=useState('');
   const[glowId,setGlowId]=useState(null);
   const[previewImg,setPreviewImg]=useState(null);
@@ -208,12 +213,16 @@ function App(){
   useEffect(()=>{const iv=setInterval(()=>setTick(t=>t+1),60000);return()=>clearInterval(iv);},[]);
   const sToast=msg=>{setToast(msg);setTimeout(()=>setToast(''),2000);};
 
-  /* ── LOAD DATA ── */
+  /* ── LOAD DATA + ✅ 自動清除 >5日 已過期排期 ── */
   const loadData=useCallback(async(showToast)=>{
     try{
       const d=await apiGet();
-      setEvents((d.schedules||[]).map(s=>({id:s.id,name:s.name,dates:Array.isArray(s.dates)?s.dates:[],st:s.st||'',et:s.et||''})));
-      /* ✅ 改3: 加 urgency */
+      let scheds=(d.schedules||[]).map(s=>({id:s.id,name:s.name,dates:Array.isArray(s.dates)?s.dates:[],st:s.st||'',et:s.et||''}));
+      /* auto-clean: delete schedules where ALL dates passed > 5 days ago */
+      const _td=new Date();_td.setHours(0,0,0,0);
+      const toClean=scheds.filter(ev=>{if(!ev.dates.length)return false;const last=[...ev.dates].sort().pop();return(_td-pd(last))/864e5>5;});
+      if(toClean.length>0){await Promise.all(toClean.map(ev=>apiPost({action:'deleteSchedule',id:ev.id}).catch(()=>{})));scheds=scheds.filter(ev=>!toClean.find(c=>c.id===ev.id));}
+      setEvents(scheds);
       setDuties((d.duties||[]).map(x=>({id:x.id,title:x.title,content:x.content||'',dl:x.dl||'',dlt:x.dlt||'',urgency:x.urgency||'',done:x.done===true||x.done==='true',dAt:x.dAt||null})));
       const recs=(d.records||[]).map(r=>({...r,files:Array.isArray(r.files)?r.files:[]}));
       setCols((d.colleagues||[]).map(c=>({id:c.id,name:c.name,records:recs.filter(r=>String(r.colleagueId)===String(c.id)).sort((a,b)=>((b.date||'')+(b.time||'')).localeCompare((a.date||'')+(a.time||'')))})));
@@ -252,10 +261,14 @@ function App(){
   const preSet=useMemo(()=>{if(!drag.a||!drag.s||!drag.e)return new Set();return drag.s===drag.e?new Set([drag.s]):new Set(getRange(drag.s,drag.e));},[drag]);
   const evDates=useMemo(()=>{if(showForm&&!editId)return new Set();const s=new Set();events.forEach(e=>{if(showForm&&e.id===editId)return;e.dates.forEach(d=>s.add(d));});return s;},[showForm,editId,events]);
 
-  /* ✅ 改4: actD 傳 urgency 入 gU */
+  /* ✅ 排期：活躍 / 已過期 / summary */
+  const todayStr=useMemo(()=>fmt(new Date()),[tick]);
+  const activeEvs=useMemo(()=>events.filter(ev=>ev.dates.some(d=>d>=todayStr)),[events,todayStr]);
+  const compEvs=useMemo(()=>events.filter(ev=>ev.dates.length>0&&ev.dates.every(d=>d<todayStr)).sort((a,b)=>{const la=[...a.dates].sort().pop()||'';const lb=[...b.dates].sort().pop()||'';return lb.localeCompare(la);}),[events,todayStr]);
+  const schedSum=useMemo(()=>{const t=new Date();t.setHours(0,0,0,0);const ts=fmt(t);const tmr=new Date(t);tmr.setDate(tmr.getDate()+1);const ms=fmt(tmr);const we=new Date(t);we.setDate(we.getDate()+7);const ws=fmt(we);let tC=0,mC=0,wC=0;activeEvs.forEach(ev=>{if(ev.dates.includes(ts))tC++;if(ev.dates.includes(ms))mC++;if(ev.dates.some(d=>d>=ts&&d<=ws))wC++;});return{tC,mC,wC};},[activeEvs,tick]);
+
   const actD=useMemo(()=>duties.filter(d=>!d.done).sort((a,b)=>gU(a.dl,a.dlt,a.urgency).p-gU(b.dl,b.dlt,b.urgency).p),[duties,tick]);
   const doneD=useMemo(()=>duties.filter(d=>d.done).sort((a,b)=>(b.dAt||'').localeCompare(a.dAt||'')),[duties]);
-  /* ✅ 改5: urgD 傳 urgency 入 gU */
   const urgD=useMemo(()=>actD.filter(d=>gU(d.dl,d.dlt,d.urgency).p<=4),[actD]);
   const dlD=useMemo(()=>actD.filter(d=>d.dl),[actD]);
   const ltD=useMemo(()=>actD.filter(d=>!d.dl),[actD]);
@@ -302,18 +315,12 @@ function App(){
   const delEv=async(id)=>{if(saving)return;setSaving(true);try{await apiPost({action:'deleteSchedule',id});sToast('已刪除');await loadData();}catch(e){sToast('刪除失敗');}setSaving(false);};
 
   /* ── DUTY CRUD ── */
-  /* ✅ 改6: resetDF 加 setDUrg('') */
   const resetDF=()=>{setShowDF(false);setEditDId(null);setDTitle('');setDCon('');setDDL('');setDDLT('');setDUrg('');};
-
-  /* ✅ 改8: saveD 加 urgency:dUrg */
   const saveD=async()=>{if(!dTitle.trim()||saving)return;setSaving(true);
     try{if(editDId)await apiPost({action:'updateDuty',id:editDId,title:dTitle.trim(),content:dCon.trim(),dl:dDL,dlt:dDLT,urgency:dUrg});
     else await apiPost({action:'addDuty',title:dTitle.trim(),content:dCon.trim(),dl:dDL,dlt:dDLT,urgency:dUrg});
     sToast(editDId?'已更新':'已新增');resetDF();await loadData();}catch(e){sToast('儲存失敗');}setSaving(false);};
-
-  /* ✅ 改7: editDFn 加 setDUrg */
   const editDFn=d=>{setEditDId(d.id);setDTitle(d.title);setDCon(d.content||'');setDDL(d.dl||'');setDDLT(d.dlt||'');setDUrg(d.urgency||'');setShowDF(true);setTimeout(()=>formRef.current?.scrollIntoView({behavior:'smooth',block:'start'}),150);};
-
   const togD=async id=>{const d=duties.find(x=>x.id===id);if(!d)return;
     if(!d.done){if(glowId)return;vib([40,30,40]);setGlowId(id);sToast('已完成 ✓');
       try{await apiPost({action:'toggleDuty',id,done:true,dAt:new Date().toISOString()});}catch(e){}
@@ -379,7 +386,6 @@ function App(){
     </div>
   );
 
-  /* ✅ 改10: renderDutyItem — 移除 showUrgency 參數，永遠顯示 badge，deadline 行靠 d.dl 判斷 */
   const renderDutyItem=(d,i,arr)=>{
     const u=gU(d.dl,d.dlt,d.urgency);const isG=glowId===d.id;
     return(<div key={d.id} className={'px-4 py-3.5 transition-colors duration-300 '+(i<arr.length-1?'border-b border-gray-700/50 ':'')+(isG?'bg-green-900/20':'')}>
@@ -401,6 +407,45 @@ function App(){
           </div>}
         </div>
         {!isG&&<div className={'w-2.5 h-2.5 rounded-full flex-shrink-0 mt-1.5 '+u.dot+(u.pu?' animate-pulse':'')}/>}
+      </div>
+    </div>);
+  };
+
+  /* ── 排期卡片渲染（活躍 + 已過期共用） ── */
+  const renderSchedCard=(ev,isComp)=>{
+    const gs=groupC(ev.dates),tl=gTL(ev),tag=isComp?null:getSchedTag(ev.dates),isCp=copiedId===ev.id,isHold=holdingId===ev.id;
+    const daysLeft=isComp?schedDaysLeft(ev.dates):0;
+    return(<div key={ev.id}
+      onTouchStart={e=>onCardTS(ev,e)} onTouchMove={onCardTM} onTouchEnd={e=>onCardTE(ev,e)}
+      onMouseDown={()=>onCardMD(ev)} onMouseUp={()=>onCardMU(ev)}
+      className={'bg-gray-900 rounded-2xl border overflow-hidden cursor-pointer transition-all duration-200 active:scale-95 no-sel '
+        +(isCp?'border-green-600 ':isHold?'border-purple-500 card-hold ':'border-gray-800 ')
+        +(isComp?'opacity-50 ':'')}>
+      <div className="p-4">
+        <div className="flex items-start justify-between mb-2">
+          <div className="flex items-center gap-2 flex-1 min-w-0 flex-wrap">
+            <h3 className={'font-semibold '+(isComp?'line-through text-gray-500':'')}>{ev.name}</h3>
+            {tag&&<span className={'px-2 py-0.5 rounded-lg text-xs font-bold flex-shrink-0 '+(tag.pu?'animate-pulse ':'')+tag.cls}>{tag.lb}</span>}
+            {isComp&&<span className="px-2 py-0.5 rounded-lg text-xs bg-gray-700 text-gray-400 flex-shrink-0">已過期</span>}
+          </div>
+          <div className="flex items-center gap-1 ml-2 flex-shrink-0">
+            {isCp&&<span className="text-xs text-green-400 flex items-center gap-1"><Ic name="check" className="w-3.5 h-3.5 text-green-400" sw={3}/>已複製</span>}
+            {isHold&&<span className="text-xs text-purple-400 flex items-center gap-1"><Ic name="pencil" className="w-3.5 h-3.5"/>修改中…</span>}
+            <button onClick={e=>{e.stopPropagation();delEv(ev.id);}} onTouchStart={e=>e.stopPropagation()} className="p-1.5 rounded-lg hover:bg-gray-800 text-gray-600"><Ic name="trash" className="w-4 h-4"/></button>
+          </div>
+        </div>
+        {isComp&&<div className="text-xs text-gray-600 mb-2 flex items-center gap-1"><Ic name="clock" className="w-3 h-3"/>{daysLeft>0?`${daysLeft}日後自動清除`:'即將自動清除'}</div>}
+        <div className="flex items-center gap-2 mb-3 flex-wrap">
+          <span className="text-xs text-purple-400">共{ev.dates.length}日</span>
+          {tl&&<span className="text-xs bg-purple-900/50 text-purple-300 px-2 py-0.5 rounded-lg flex items-center gap-1"><Ic name="clock" className="w-3 h-3"/>{tl}</span>}
+        </div>
+        <div className="space-y-2">{gs.map((g,gi)=><div key={gi}>{g.length>1?
+          <div className="flex items-center gap-2 bg-purple-900/30 rounded-xl px-3 py-2"><div className="w-2 h-2 rounded-full bg-purple-400"/><span className="text-sm text-purple-200">{sd(g[0])} → {sd(g[g.length-1])}</span><span className="text-xs text-purple-400 ml-auto">連續{g.length}日</span></div>:
+          <div className="flex items-center gap-2 bg-gray-800 rounded-xl px-3 py-2"><div className="w-2 h-2 rounded-full bg-amber-400"/><span className="text-sm text-gray-200">{dd(g[0])}</span><span className="text-xs text-amber-400 ml-auto">單日</span></div>}</div>)}</div>
+        <div className="mt-3 pt-3 border-t border-gray-800"><div className="flex gap-1 flex-wrap">{ev.dates.map((d,i)=>{
+          const pv=i>0?ev.dates[i-1]:null,isG=pv&&((pd(d)-pd(pv))/864e5)>1;
+          return<Fragment key={d}>{isG&&<div className="w-2"/>}<div className="flex flex-col items-center"><div className={'w-8 h-8 rounded-lg flex items-center justify-center text-xs font-medium '+(isG?'bg-amber-900/40 text-amber-300':'bg-purple-900/50 text-purple-200')}>{pd(d).getDate()}</div><span className="text-xs text-gray-600 mt-0.5">{WD[pd(d).getDay()]}</span></div></Fragment>;
+        })}</div></div>
       </div>
     </div>);
   };
@@ -484,39 +529,26 @@ function App(){
         <button onClick={saveEv} disabled={!eName.trim()||!sel.length||saving} className="w-full py-3 rounded-xl font-semibold text-sm bg-purple-600 disabled:bg-gray-700 disabled:text-gray-500">{saving?'儲存中...':editId?'更新排期':'儲存排期'}</button>
       </div>}
 
-      {!showForm&&events.length>0&&<div className="text-xs text-gray-500 bg-gray-900/50 rounded-xl px-3 py-2 mb-4 text-center no-sel">📋 㩒一下＝直接Copy ｜ 長㩒0.5秒＝修改</div>}
+      {/* ✅ Summary 提示 bar */}
+      {!showForm&&(schedSum.tC>0||schedSum.mC>0||schedSum.wC>0)&&<div className="bg-gray-900/80 border border-gray-800 rounded-xl px-4 py-3 mb-4 text-sm no-sel">
+        {(schedSum.tC>0||schedSum.mC>0)&&<div className="flex items-center gap-3 flex-wrap">{schedSum.tC>0&&<span className="text-red-300 font-medium">⚡ 今日 {schedSum.tC} 個排期</span>}{schedSum.mC>0&&<span className="text-orange-300 font-medium">📌 聽日 {schedSum.mC} 個排期</span>}</div>}
+        {schedSum.wC>0&&<div className={(schedSum.tC>0||schedSum.mC>0)?'text-gray-500 text-xs mt-1':'text-gray-400'}>📅 本週共 {schedSum.wC} 個排期</div>}
+      </div>}
+
+      {!showForm&&activeEvs.length>0&&<div className="text-xs text-gray-500 bg-gray-900/50 rounded-xl px-3 py-2 mb-4 text-center no-sel">📋 㩒一下＝直接Copy ｜ 長㩒0.5秒＝修改</div>}
 
       <div className="space-y-4">
-        {events.length===0&&!showForm&&<div className="text-center text-gray-500 py-16"><Ic name="cal" className="w-12 h-12 mx-auto mb-3 opacity-30"/><p>未有排期紀錄</p></div>}
-        {events.map(ev=>{const gs=groupC(ev.dates),tl=gTL(ev),isCp=copiedId===ev.id,isHold=holdingId===ev.id;return(
-          <div key={ev.id}
-            onTouchStart={e=>onCardTS(ev,e)} onTouchMove={onCardTM} onTouchEnd={e=>onCardTE(ev,e)}
-            onMouseDown={()=>onCardMD(ev)} onMouseUp={()=>onCardMU(ev)}
-            className={'bg-gray-900 rounded-2xl border overflow-hidden cursor-pointer transition-all duration-200 active:scale-95 no-sel '
-              +(isCp?'border-green-600 ':isHold?'border-purple-500 card-hold ':'border-gray-800 ')}>
-            <div className="p-4">
-              <div className="flex items-start justify-between mb-2">
-                <h3 className="font-semibold flex-1">{ev.name}</h3>
-                <div className="flex items-center gap-1 ml-2 flex-shrink-0">
-                  {isCp&&<span className="text-xs text-green-400 flex items-center gap-1"><Ic name="check" className="w-3.5 h-3.5 text-green-400" sw={3}/>已複製</span>}
-                  {isHold&&<span className="text-xs text-purple-400 flex items-center gap-1"><Ic name="pencil" className="w-3.5 h-3.5"/>修改中…</span>}
-                  <button onClick={e=>{e.stopPropagation();delEv(ev.id);}} onTouchStart={e=>e.stopPropagation()} className="p-1.5 rounded-lg hover:bg-gray-800 text-gray-600"><Ic name="trash" className="w-4 h-4"/></button>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 mb-3 flex-wrap">
-                <span className="text-xs text-purple-400">共{ev.dates.length}日</span>
-                {tl&&<span className="text-xs bg-purple-900/50 text-purple-300 px-2 py-0.5 rounded-lg flex items-center gap-1"><Ic name="clock" className="w-3 h-3"/>{tl}</span>}
-              </div>
-              <div className="space-y-2">{gs.map((g,gi)=><div key={gi}>{g.length>1?
-                <div className="flex items-center gap-2 bg-purple-900/30 rounded-xl px-3 py-2"><div className="w-2 h-2 rounded-full bg-purple-400"/><span className="text-sm text-purple-200">{sd(g[0])} → {sd(g[g.length-1])}</span><span className="text-xs text-purple-400 ml-auto">連續{g.length}日</span></div>:
-                <div className="flex items-center gap-2 bg-gray-800 rounded-xl px-3 py-2"><div className="w-2 h-2 rounded-full bg-amber-400"/><span className="text-sm text-gray-200">{dd(g[0])}</span><span className="text-xs text-amber-400 ml-auto">單日</span></div>}</div>)}</div>
-              <div className="mt-3 pt-3 border-t border-gray-800"><div className="flex gap-1 flex-wrap">{ev.dates.map((d,i)=>{
-                const pv=i>0?ev.dates[i-1]:null,isG=pv&&((pd(d)-pd(pv))/864e5)>1;
-                return<Fragment key={d}>{isG&&<div className="w-2"/>}<div className="flex flex-col items-center"><div className={'w-8 h-8 rounded-lg flex items-center justify-center text-xs font-medium '+(isG?'bg-amber-900/40 text-amber-300':'bg-purple-900/50 text-purple-200')}>{pd(d).getDate()}</div><span className="text-xs text-gray-600 mt-0.5">{WD[pd(d).getDay()]}</span></div></Fragment>;
-              })}</div></div>
-            </div>
-          </div>);})}
+        {activeEvs.length===0&&compEvs.length===0&&!showForm&&<div className="text-center text-gray-500 py-16"><Ic name="cal" className="w-12 h-12 mx-auto mb-3 opacity-30"/><p>未有排期紀錄</p></div>}
+        {activeEvs.map(ev=>renderSchedCard(ev,false))}
       </div>
+
+      {/* ✅ 已過期排期 (collapsible) */}
+      {compEvs.length>0&&<div className="mt-6">
+        <button onClick={()=>setShowSchedDone(!showSchedDone)} className="flex items-center gap-2 mb-3 px-1 text-sm font-semibold text-gray-500 w-full no-sel">
+          <Ic name="check" className="w-4 h-4 text-green-600"/>已過期<span className="text-xs text-gray-600">{compEvs.length}</span><span className="text-xs text-gray-700 ml-1">· 5日後自動清除</span><Ic name="down" className={'w-4 h-4 ml-auto transition-transform '+(showSchedDone?'rotate-180':'')}/>
+        </button>
+        {showSchedDone&&<div className="space-y-4">{compEvs.map(ev=>renderSchedCard(ev,true))}</div>}
+      </div>}
     </div>}
 
     {/* ======= DUTY ======= */}
@@ -538,8 +570,6 @@ function App(){
         </div>
         {dDL&&<div className="bg-gray-800 rounded-xl px-3 py-2 mb-4 text-sm text-purple-200 flex items-center gap-2"><Ic name="cal" className="w-4 h-4 text-purple-400"/>{dd(dDL)}{dDLT&&` ${fT(dDLT)}`}</div>}
         {!dDL&&<div className="bg-purple-900/20 rounded-xl px-3 py-2 mb-4 text-sm text-purple-300">📌 無deadline → 長線處理</div>}
-
-        {/* ✅ 改9: 緊急度 pill buttons */}
         <div className="text-xs text-gray-400 mb-2 flex items-center gap-1">⚡ 緊急度</div>
         <div className="flex gap-2 mb-4 flex-wrap">
           {URG_OPTS.map(o=><button key={o.k} type="button" onClick={()=>setDUrg(o.k)}
@@ -547,7 +577,6 @@ function App(){
             {o.l}
           </button>)}
         </div>
-
         <button onClick={saveD} disabled={!dTitle.trim()||saving} className="w-full py-3 rounded-xl font-semibold text-sm bg-purple-600 disabled:bg-gray-700 disabled:text-gray-500">{saving?'儲存中...':editDId?'更新':'新增'}</button>
       </div>}
       {actD.length===0&&!showDF&&doneD.length===0&&<div className="text-center text-gray-500 py-16"><Ic name="clipboard" className="w-12 h-12 mx-auto mb-3 opacity-30"/><p>未有事項</p></div>}
