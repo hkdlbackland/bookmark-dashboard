@@ -248,7 +248,6 @@ function App(){
   useEffect(()=>{const iv=setInterval(()=>setTick(t=>t+1),60000);return()=>clearInterval(iv);},[]);
   const sToast=msg=>{setToast(msg);setTimeout(()=>setToast(''),2000);};
 
-  /* ── LOAD DATA ── */
   const loadData=useCallback(async(showToast)=>{
     try{
       const d=await apiGet();
@@ -265,7 +264,6 @@ function App(){
   },[]);
   useEffect(()=>{loadData();},[loadData]);
 
-  /* ── FILE UPLOAD ── */
   const handleFileChange=async(e,setFiles)=>{
     if(!e.target.files||!e.target.files.length)return;
     setUploading(true);
@@ -287,9 +285,7 @@ function App(){
   const evDates=useMemo(()=>{if(showForm&&!editId)return new Set();const s=new Set();events.forEach(e=>{if(showForm&&e.id===editId)return;e.dates.forEach(d=>s.add(d));});return s;},[showForm,editId,events]);
 
   const todayStr=useMemo(()=>fmt(new Date()),[tick]);
-  /* 活躍排期: 有未來日期 OR 過期<=5日 */
   const activeEvs=useMemo(()=>{const now=new Date();now.setHours(0,0,0,0);return events.filter(ev=>{if(!ev.dates.length)return true;const last=[...ev.dates].sort().pop();if(ev.dates.some(d=>d>=todayStr))return true;return Math.round((now-pd(last))/864e5)<=5;}).sort((a,b)=>schedPri(a)-schedPri(b));},[events,todayStr]);
-  /* 已過期: 過期>5日 */
   const compEvs=useMemo(()=>{const now=new Date();now.setHours(0,0,0,0);return events.filter(ev=>{if(!ev.dates.length)return false;if(ev.dates.some(d=>d>=todayStr))return false;const last=[...ev.dates].sort().pop();return Math.round((now-pd(last))/864e5)>5;}).sort((a,b)=>{const la=[...a.dates].sort().pop()||'';const lb=[...b.dates].sort().pop()||'';return lb.localeCompare(la);});},[events,todayStr]);
   const schedSum=useMemo(()=>{const t=new Date();t.setHours(0,0,0,0);const ts=fmt(t);const tmr=new Date(t);tmr.setDate(tmr.getDate()+1);const ms=fmt(tmr);const we=new Date(t);we.setDate(we.getDate()+7);const ws=fmt(we);let tC=0,mC=0,wC=0;activeEvs.forEach(ev=>{if(ev.dates.includes(ts))tC++;if(ev.dates.includes(ms))mC++;if(ev.dates.some(d=>d>=ts&&d<=ws))wC++;});return{tC,mC,wC};},[activeEvs,tick]);
 
@@ -301,7 +297,6 @@ function App(){
 
   const toggleDate=useCallback(ds=>{setSel(p=>p.includes(ds)?p.filter(x=>x!==ds):[...p,ds].sort());},[]);
 
-  /* ── Calendar Touch ── */
   useEffect(()=>{
     const el=gridRef.current;if(!el)return;
     let sPos=null,sDate=null,cDate=null,tmr=null,holdReady=false,dragActive=false,dirLocked=false,isV=false,dMode=null;
@@ -323,7 +318,6 @@ function App(){
     window.addEventListener('mousemove',mm);window.addEventListener('mouseup',mu);return()=>{window.removeEventListener('mousemove',mm);window.removeEventListener('mouseup',mu);};
   },[toggleDate]);
 
-  /* ── Schedule Card Touch (0.7s long press) ── */
   const cardTmr=useRef(null);const cardMoved=useRef(false);const cardTriggered=useRef(false);
   const doCopy=ev=>{const t=bCopy(ev);try{navigator.clipboard?.writeText(t);}catch(e){}vib();setCopiedId(ev.id);sToast('已複製！');setTimeout(()=>setCopiedId(null),1500);};
   const startEdit=ev=>{setEditId(ev.id);setEName(ev.name);setSel([...ev.dates]);setSTime(ev.st||'');setETime(ev.et||'');setShowForm(true);if(ev.dates.length>0){const d=pd(ev.dates[0]);setVMo(new Date(d.getFullYear(),d.getMonth(),1));}setTimeout(()=>formRef.current?.scrollIntoView({behavior:'smooth',block:'start'}),150);};
@@ -334,7 +328,6 @@ function App(){
   useEffect(()=>{const mm=()=>{if(!cardMoved.current){cardMoved.current=true;clearTimeout(cardTmr.current);}};window.addEventListener('mousemove',mm);return()=>window.removeEventListener('mousemove',mm);},[]);
   const onCardMU=(ev)=>{clearTimeout(cardTmr.current);cardTmr.current=null;if(cardTriggered.current)return;if(!cardMoved.current){doCopy(ev);}};
 
-  /* ── SCHEDULE CRUD (Optimistic) ── */
   const saveEv=()=>{if(!eName.trim()||!sel.length||busy.current)return;busy.current=true;
     const nm=eName.trim(),ds=[...sel],st=sTime,et=eTime;
     if(editId){
@@ -350,7 +343,6 @@ function App(){
   const resetF=()=>{setShowForm(false);setSel([]);setEName('');setSTime('');setETime('');setEditId(null);};
   const delEv=id=>{setEvents(p=>p.filter(e=>e.id!==id));vib();sToast('已刪除');apiPost({action:'deleteSchedule',id}).catch(()=>{sToast('刪除失敗');loadData();});};
 
-  /* ── DUTY CRUD (Optimistic) ── */
   const resetDF=()=>{setShowDF(false);setEditDId(null);setDTitle('');setDCon('');setDDL('');setDDLT('');setDUrg('');};
   const saveD=()=>{if(!dTitle.trim()||busy.current)return;busy.current=true;
     const ti=dTitle.trim(),co=dCon.trim(),dl=dDL,dlt=dDLT,urg=dUrg;
@@ -373,14 +365,12 @@ function App(){
       apiPost({action:'toggleDuty',id,done:false,dAt:''}).catch(()=>{sToast('操作失敗');loadData();});}};
   const delD=id=>{setDuties(p=>p.filter(d=>d.id!==id));vib();sToast('已刪除');apiPost({action:'deleteDuty',id}).catch(()=>{sToast('刪除失敗');loadData();});};
 
-  /* ── COLLEAGUE CRUD (Optimistic) ── */
   const addColFn=()=>{if(!newCol.trim()||busy.current)return;busy.current=true;
     const nm=newCol.trim(),tmpId='tc-'+Date.now();
     setCols(p=>[...p,{id:tmpId,name:nm,records:[]}]);setNewCol('');setShowAddCol(false);sToast('已新增');
     apiPost({action:'addColleague',name:nm}).then(res=>{busy.current=false;if(res?.id)setCols(p=>p.map(c=>c.id===tmpId?{...c,id:res.id}:c));}).catch(()=>{busy.current=false;loadData();});};
   const delCol=id=>{setCols(p=>p.filter(c=>c.id!==id));vib();sToast('已刪除');apiPost({action:'deleteColleague',id}).catch(()=>{sToast('刪除失敗');loadData();});};
 
-  /* ── RECORD CRUD (Optimistic) ── */
   const openAR=cId=>{setAddRecCol(cId);setRecTxt('');setRecDt(fmt(new Date()));setRecTm('');setRecFiles([]);setEditRec(null);};
   const openER=(cId,r)=>{setAddRecCol(cId);setRecTxt(r.content);setRecDt(r.date||'');setRecTm(r.time||'');setRecFiles(r.files||[]);setEditRec(r.id);};
   const saveR=()=>{if(!recTxt.trim()||!addRecCol||busy.current)return;busy.current=true;
@@ -397,14 +387,12 @@ function App(){
     }};
   const delRec=(cId,rId)=>{setCols(p=>p.map(c=>c.id===cId?{...c,records:c.records.filter(r=>r.id!==rId)}:c));vib();sToast('已刪除');apiPost({action:'deleteRecord',id:rId}).catch(()=>{sToast('刪除失敗');loadData();});};
 
-  /* ── TOPIC CRUD (Optimistic) ── */
   const addTopicFn=()=>{if(!newTopic.trim()||busy.current)return;busy.current=true;
     const nm=newTopic.trim(),tmpId='tt-'+Date.now();
     setTopics(p=>[...p,{id:tmpId,name:nm,items:[]}]);setNewTopic('');setShowAddTopic(false);setExpTopic(tmpId);sToast('已新增');
     apiPost({action:'addTopic',name:nm}).then(res=>{busy.current=false;if(res?.id){setTopics(p=>p.map(t=>t.id===tmpId?{...t,id:res.id}:t));setExpTopic(res.id);}}).catch(()=>{busy.current=false;loadData();});};
   const delTopic=id=>{setTopics(p=>p.filter(t=>t.id!==id));vib();sToast('已刪除');apiPost({action:'deleteTopic',id}).catch(()=>{sToast('刪除失敗');loadData();});};
 
-  /* ── TOPIC ITEM CRUD (Optimistic) ── */
   const openAI=tId=>{setAddItemTopic(tId);setItemTitle('');setItemCon('');setItemFiles([]);setEditItem(null);};
   const openEI=(tId,it)=>{setAddItemTopic(tId);setItemTitle(it.title);setItemCon(it.content||'');setItemFiles(it.files||[]);setEditItem(it.id);};
   const saveItemFn=()=>{if(!itemTitle.trim()||!addItemTopic||busy.current)return;busy.current=true;
@@ -474,7 +462,7 @@ function App(){
     </div></SwipeDel>);
   };
 
-  /* ── Schedule card ── */
+  /* ── Schedule card (UPDATED LAYOUT) ── */
   const renderSchedCard=(ev,isComp)=>{
     const gs=groupC(ev.dates),tl=gTL(ev),tag=getSchedTag(ev.dates),isCp=copiedId===ev.id,isHold=holdingId===ev.id;
     return(<SwipeDel key={ev.id} onDel={()=>delEv(ev.id)} rcls="rounded-2xl" bg="bg-gray-900">
@@ -485,6 +473,7 @@ function App(){
           +(isCp?'border-green-600 ':isHold?'border-purple-500 card-hold ':isComp?'border-gray-800/50 ':'border-gray-800 ')
           +(isComp?'opacity-50 ':'')}>
         <div className="p-4">
+          {/* Row 1: Name + Tag */}
           <div className="flex items-start justify-between mb-2">
             <div className="flex items-center gap-2 flex-1 min-w-0 flex-wrap">
               <h3 className={'font-semibold '+(isComp?'line-through text-gray-500':'')}>{ev.name}</h3>
@@ -495,23 +484,30 @@ function App(){
               {isHold&&<span className="text-xs text-purple-400 flex items-center gap-1"><Ic name="pencil" className="w-3.5 h-3.5"/>修改中…</span>}
             </div>
           </div>
-          <div className="flex items-center gap-2 mb-3 flex-wrap">
-            <span className="text-xs text-purple-400">共{ev.dates.length}日</span>
-            {tl&&<span className="text-xs bg-purple-900/50 text-purple-300 px-2 py-0.5 rounded-lg flex items-center gap-1"><Ic name="clock" className="w-3 h-3"/>{tl}</span>}
+
+          {/* Row 2: 共X日 + time (left) | date boxes (right) */}
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs text-purple-400">共{ev.dates.length}日</span>
+              {tl&&<span className="text-xs bg-purple-900/50 text-purple-300 px-2 py-0.5 rounded-lg flex items-center gap-1"><Ic name="clock" className="w-3 h-3"/>{tl}</span>}
+            </div>
+            <div className="flex gap-1 flex-shrink-0 ml-2">
+              {ev.dates.map((d,i)=>{
+                const pv=i>0?ev.dates[i-1]:null,isG=pv&&((pd(d)-pd(pv))/864e5)>1;
+                return<Fragment key={d}>{isG&&<div className="w-1.5"/>}<div className="flex flex-col items-center"><div className={'w-7 h-7 rounded-md flex items-center justify-center text-xs font-medium '+(isG?'bg-amber-900/40 text-amber-300':'bg-purple-900/50 text-purple-200')}>{pd(d).getDate()}</div><span className="text-xs text-gray-600 mt-0.5 leading-none">{WD[pd(d).getDay()]}</span></div></Fragment>;
+              })}
+            </div>
           </div>
+
+          {/* Date groups */}
           <div className="space-y-2">{gs.map((g,gi)=><div key={gi}>{g.length>1?
             <div className="flex items-center gap-2 bg-purple-900/30 rounded-xl px-3 py-2"><div className="w-2 h-2 rounded-full bg-purple-400"/><span className="text-sm text-purple-200">{sd(g[0])} → {sd(g[g.length-1])}</span><span className="text-xs text-purple-400 ml-auto">連續{g.length}日</span></div>:
             <div className="flex items-center gap-2 bg-gray-800 rounded-xl px-3 py-2"><div className="w-2 h-2 rounded-full bg-amber-400"/><span className="text-sm text-gray-200">{dd(g[0])}</span><span className="text-xs text-amber-400 ml-auto">單日</span></div>}</div>)}</div>
-          <div className="mt-3 pt-3 border-t border-gray-800"><div className="flex gap-1 flex-wrap">{ev.dates.map((d,i)=>{
-            const pv=i>0?ev.dates[i-1]:null,isG=pv&&((pd(d)-pd(pv))/864e5)>1;
-            return<Fragment key={d}>{isG&&<div className="w-2"/>}<div className="flex flex-col items-center"><div className={'w-8 h-8 rounded-lg flex items-center justify-center text-xs font-medium '+(isG?'bg-amber-900/40 text-amber-300':'bg-purple-900/50 text-purple-200')}>{pd(d).getDate()}</div><span className="text-xs text-gray-600 mt-0.5">{WD[pd(d).getDay()]}</span></div></Fragment>;
-          })}</div></div>
         </div>
       </div>
     </SwipeDel>);
   };
 
-  /* ── LOADING ── */
   if(loading)return(<div className="min-h-screen bg-gray-950 flex items-center justify-center">
     <div className="text-center"><div className="w-10 h-10 border-4 border-purple-500 border-t-transparent rounded-full spinner mx-auto mb-3"/><p className="text-gray-400 text-sm">載入中...</p></div>
   </div>);
@@ -547,7 +543,6 @@ function App(){
       </div>
     </div>
 
-    {/* ======= SCHEDULE ======= */}
     {view==='schedule'&&<div>
       {showForm&&<div ref={formRef} className="bg-gray-900 rounded-2xl p-4 mb-6 border border-gray-800">
         <div className="flex items-center justify-between mb-4"><h2 className="font-semibold text-lg">{editId?'修改排期':'新增排期'}</h2><button onClick={resetF}><Ic name="x" className="w-5 h-5 text-gray-500"/></button></div>
@@ -608,7 +603,6 @@ function App(){
       </div>}
     </div>}
 
-    {/* ======= DUTY ======= */}
     {view==='duty'&&<div>
       {urgD.length>0&&!showDF&&<div className="bg-gray-900 rounded-2xl border border-red-900/40 p-4 mb-5">
         <div className="flex items-center gap-2 text-red-300 text-sm font-semibold mb-3"><Ic name="alert" className="w-4 h-4"/>⚡ 優先處理<span className="text-xs text-red-500 ml-auto">{urgD.length}項</span></div>
@@ -664,7 +658,6 @@ function App(){
       </div>}
     </div>}
 
-    {/* ======= COLLEAGUES ======= */}
     {view==='colleagues'&&<div>
       {showAddCol&&<div className="bg-gray-900 rounded-2xl p-4 mb-4 border border-gray-800">
         <div className="flex items-center justify-between mb-3"><h3 className="font-semibold">新增同事</h3><button onClick={()=>{setShowAddCol(false);setNewCol('');}}><Ic name="x" className="w-5 h-5 text-gray-500"/></button></div>
@@ -727,7 +720,6 @@ function App(){
       </div>
     </div>}
 
-    {/* ======= INFO ======= */}
     {view==='info'&&<div>
       {showAddTopic&&<div className="bg-gray-900 rounded-2xl p-4 mb-4 border border-gray-800">
         <div className="flex items-center justify-between mb-3"><h3 className="font-semibold">新增分類</h3><button onClick={()=>{setShowAddTopic(false);setNewTopic('');}}><Ic name="x" className="w-5 h-5 text-gray-500"/></button></div>
