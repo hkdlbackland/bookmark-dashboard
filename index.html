@@ -886,7 +886,7 @@ useEffect(() => {
             </div>
           </div>
           {isE&&<div className="px-4 pb-4">
-            {isA&&<div className="bg-gray-800 rounded-xl p-3 mb-4 border border-blue-900">
+            {isA&&<div ref={itemFormRef} className="bg-gray-800 rounded-xl p-3 mb-4 border border-blue-900">
               <div className="text-sm font-medium text-blue-300 mb-2">{editItem?'修改資訊':'新增資訊'}</div>
               <input type="text" placeholder="標題（如：WiFi密碼、請假流程）" value={itemTitle} onChange={e=>setItemTitle(e.target.value)} {...dp} className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 text-sm mb-3"/>
               <textarea placeholder="內容（選填）" value={itemCon} onChange={e=>setItemCon(e.target.value)} rows={3} className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 text-sm resize-none mb-3"/>
