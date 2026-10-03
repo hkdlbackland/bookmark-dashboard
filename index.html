@@ -277,6 +277,17 @@ function App(){
   const[tick,setTick]=useState(0);
   useEffect(()=>{const iv=setInterval(()=>setTick(t=>t+1),60000);return()=>clearInterval(iv);},[]);
   const sToast=msg=>{setToast(msg);setTimeout(()=>setToast(''),2000);};
+  
+  useEffect(() => {
+  if (addRecCol)
+    setTimeout(() => recFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150);
+}, [addRecCol]);
+
+useEffect(() => {
+  if (addItemTopic)
+    setTimeout(() => itemFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150);
+}, [addItemTopic]);
+  
   useEffect(()=>{
     let sY=0;
     const isEd=el=>{if(!el)return false;if(el.tagName==='TEXTAREA')return true;if(el.tagName==='INPUT'){const t=el.type;return!t||t==='text'||t==='search'||t==='url'||t==='tel'||t==='email'||t==='number'||t==='password';}return false;};
