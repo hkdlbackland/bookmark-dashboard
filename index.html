@@ -256,6 +256,7 @@ function App(){
   const fileInpRec=useRef(null);
   const fileInpItem=useRef(null);
   const busy=useRef(false);
+  const scrollSave=useRef(null);
   useEffect(()=>{selRef.current=sel;},[sel]);
 
   /* ── 統一長按 0.7s 手勢 ── */
