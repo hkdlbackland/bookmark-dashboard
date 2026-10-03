@@ -819,7 +819,7 @@ useEffect(() => {
             </div>
           </div>
           {isE&&<div className="px-4 pb-4">
-            {isA&&<div className="bg-gray-800 rounded-xl p-3 mb-4 border border-purple-900">
+            {isA&&<div ref={recFormRef} className="bg-gray-800 rounded-xl p-3 mb-4 border border-purple-900">
               <div className="text-sm font-medium text-purple-300 mb-2">{editRec?'修改紀錄':'新增紀錄'}</div>
               <textarea placeholder="紀錄內容..." value={recTxt} onChange={e=>setRecTxt(e.target.value)} rows={3} className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 text-sm resize-none mb-3"/>
               <div className="grid grid-cols-2 gap-2 mb-3">
