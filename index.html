@@ -32,7 +32,7 @@ input,textarea,button{font-family:inherit}
 <body>
 <div id="root"></div>
 <script type="text/babel">
-const{useState,useMemo,useRef,useEffect,useCallback,Fragment}=React;
+const{useState,useMemo,useRef,useEffect,useLayoutEffect,useCallback,Fragment}=React;
 
 const API='https://script.google.com/macros/s/AKfycbwSAsL31V7iWj0wBMOd-8l3ZHCqLcDGvCvssRXQ9WqGyJBzTZOyGn5Nirwcz42DugOIaA/exec';
 async function apiGet(){const r=await fetch(API+'?action=getAll&_='+Date.now());return r.json();}
@@ -297,7 +297,7 @@ function App(){
     setUploading(true);
     const files=Array.from(e.target.files);const results=[];
     for(const f of files){
-      try{if(f.size>5*1024*1024){sToast(f.name+' 太大（上限5MB）');continue;}
+      try{if(f.size>20*1024*1024){sToast(f.name+' 太大（上限20MB）');continue;}
         sToast('上傳中：'+f.name);const b64=await fileToB64(f);
         const res=await apiPost({action:'uploadFile',base64:b64,fileName:f.name,mimeType:f.type});
         if(res.success)results.push({id:res.fileId,name:res.fileName,type:res.mimeType,url:res.url,viewUrl:res.viewUrl,isImage:res.isImage});
