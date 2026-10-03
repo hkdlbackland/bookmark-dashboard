@@ -275,6 +275,16 @@ function App(){
   const[tick,setTick]=useState(0);
   useEffect(()=>{const iv=setInterval(()=>setTick(t=>t+1),60000);return()=>clearInterval(iv);},[]);
   const sToast=msg=>{setToast(msg);setTimeout(()=>setToast(''),2000);};
+  useEffect(()=>{
+    let sY=0;
+    const isEd=el=>{if(!el)return false;if(el.tagName==='TEXTAREA')return true;if(el.tagName==='INPUT'){const t=el.type;return!t||t==='text'||t==='search'||t==='url'||t==='tel'||t==='email'||t==='number'||t==='password';}return false;};
+    const onF=e=>{if(isEd(e.target)){sY=window.scrollY;document.body.style.position='fixed';document.body.style.top=`-${sY}px`;document.body.style.left='0';document.body.style.right='0';document.body.style.width='100%';}};
+    const onB=e=>{if(isEd(e.target)){document.body.style.position='';document.body.style.top='';document.body.style.left='';document.body.style.right='';document.body.style.width='';window.scrollTo(0,sY);}};
+    document.addEventListener('focusin',onF);document.addEventListener('focusout',onB);
+    return()=>{document.removeEventListener('focusin',onF);document.removeEventListener('focusout',onB);};
+  },[]);
+
+  useLayoutEffect(()=>{if(scrollSave.current!==null){window.scrollTo(0,scrollSave.current);scrollSave.current=null;}},[addRecCol,editRec]);
 
   const loadData=useCallback(async(showToast)=>{
     try{
