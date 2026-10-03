@@ -452,7 +452,7 @@ function App(){
       setAddRecCol(null);setRecTxt('');setEditRec(null);setRecFiles([]);sToast('已新增');
       apiPost({action:'addRecord',colleagueId:cId,content:ct,date:dt,time:tm,files:fls}).then(res=>{busy.current=false;if(res?.id)setCols(p=>p.map(c=>({...c,records:c.records.map(r=>r.id===tmpId?{...r,id:res.id}:r)})));}).catch(()=>{busy.current=false;loadData();});
     }};
-  const delRec=(cId,rId)=>{setCols(p=>p.map(c=>c.id===cId?{...c,records:c.records.filter(r=>r.id!==rId)}:c));vib();sToast('已刪除');apiPost({action:'deleteRecord',id:rId}).catch(()=>{sToast('刪除失敗');loadData();});};
+  const delRec=(cId,rId)=>{const col=cols.find(c=>c.id===cId);const rec=col?.records.find(r=>r.id===rId);const fIds=(rec?.files||[]).map(f=>f.id).filter(Boolean);setCols(p=>p.map(c=>c.id===cId?{...c,records:c.records.filter(r=>r.id!==rId)}:c));vib();sToast('已刪除');apiPost({action:'deleteRecord',id:rId,fileIds:fIds}).catch(()=>{sToast('刪除失敗');loadData();});};
 
   /* ── Topic CRUD ── */
   const addTopicFn=()=>{if(!newTopic.trim()||busy.current)return;busy.current=true;
@@ -483,7 +483,7 @@ function App(){
     const reorder=arr.map((item,i)=>({...item,sortOrder:i}));
     setTopics(p=>p.map(t=>t.id===tId?{...t,items:reorder}:t));
     apiPost({action:'reorderTopicItems',items:reorder.map(i=>({id:i.id,sortOrder:i.sortOrder}))}).catch(()=>loadData());};
-  const delItem=(tId,iId)=>{setTopics(p=>p.map(t=>t.id===tId?{...t,items:t.items.filter(i=>i.id!==iId)}:t));vib();sToast('已刪除');apiPost({action:'deleteTopicItem',id:iId}).catch(()=>{sToast('刪除失敗');loadData();});};
+  const delItem=(tId,iId)=>{const tp=topics.find(t=>t.id===tId);const it=tp?.items.find(i=>i.id===iId);const fIds=(it?.files||[]).map(f=>f.id).filter(Boolean);setTopics(p=>p.map(t=>t.id===tId?{...t,items:t.items.filter(i=>i.id!==iId)}:t));vib();sToast('已刪除');apiPost({action:'deleteTopicItem',id:iId,fileIds:fIds}).catch(()=>{sToast('刪除失敗');loadData();});};
 
   const VS=[
     {k:'schedule',l:'所有排期',ic:'cal'},
