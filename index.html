@@ -440,6 +440,7 @@ function App(){
   const openAR=cId=>{scrollSave.current=window.scrollY;setAddRecCol(cId);setRecTxt('');setRecDt(fmt(new Date()));setRecTm('');setRecFiles([]);setEditRec(null);};
   const openER=(cId,r)=>{scrollSave.current=window.scrollY;setAddRecCol(cId);setRecTxt(r.content);setRecDt(r.date||'');setRecTm(r.time||'');setRecFiles(r.files||[]);setEditRec(r.id);};
   const saveR=()=>{if(!recTxt.trim()||!addRecCol||busy.current)return;busy.current=true;
+    scrollSave.current=window.scrollY;
     const cId=addRecCol,ct=recTxt.trim(),dt=recDt,tm=recTm,fls=[...recFiles];
     if(editRec){
       setCols(p=>p.map(c=>c.id===cId?{...c,records:c.records.map(r=>r.id===editRec?{...r,content:ct,date:dt,time:tm,files:fls}:r)}:c));
