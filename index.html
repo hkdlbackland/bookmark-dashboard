@@ -437,8 +437,8 @@ function App(){
     apiPost({action:'addColleague',name:nm}).then(res=>{busy.current=false;if(res?.id)setCols(p=>p.map(c=>c.id===tmpId?{...c,id:res.id}:c));}).catch(()=>{busy.current=false;loadData();});};
   const delCol=id=>{setCols(p=>p.filter(c=>c.id!==id));vib();sToast('已刪除');apiPost({action:'deleteColleague',id}).catch(()=>{sToast('刪除失敗');loadData();});};
 
-  const openAR=cId=>{setAddRecCol(cId);setRecTxt('');setRecDt(fmt(new Date()));setRecTm('');setRecFiles([]);setEditRec(null);};
-  const openER=(cId,r)=>{setAddRecCol(cId);setRecTxt(r.content);setRecDt(r.date||'');setRecTm(r.time||'');setRecFiles(r.files||[]);setEditRec(r.id);};
+  const openAR=cId=>{scrollSave.current=window.scrollY;setAddRecCol(cId);setRecTxt('');setRecDt(fmt(new Date()));setRecTm('');setRecFiles([]);setEditRec(null);};
+  const openER=(cId,r)=>{scrollSave.current=window.scrollY;setAddRecCol(cId);setRecTxt(r.content);setRecDt(r.date||'');setRecTm(r.time||'');setRecFiles(r.files||[]);setEditRec(r.id);};
   const saveR=()=>{if(!recTxt.trim()||!addRecCol||busy.current)return;busy.current=true;
     const cId=addRecCol,ct=recTxt.trim(),dt=recDt,tm=recTm,fls=[...recFiles];
     if(editRec){
