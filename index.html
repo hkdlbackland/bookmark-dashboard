@@ -58,6 +58,7 @@ paperclip:<><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 
 file:<><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></>,
 image:<><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></>,
 refresh:<><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></>,
+monitor:<><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></>,
 };
 return(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" className={className}>{p[name]}</svg>);
 }
@@ -221,6 +222,7 @@ function App(){
   const[itemFiles,setItemFiles]=useState([]);
   const[editItem,setEditItem]=useState(null);
 
+  /* ── Duty 日常 state ── */
   const[duties,setDuties]=useState([]);
   const[showDF,setShowDF]=useState(false);
   const[editDId,setEditDId]=useState(null);
@@ -230,6 +232,18 @@ function App(){
   const[dDLT,setDDLT]=useState('');
   const[dUrg,setDUrg]=useState('');
   const[showDone,setShowDone]=useState(false);
+
+  /* ── IT支援 state ── */
+  const[its,setIts]=useState([]);
+  const[showITF,setShowITF]=useState(false);
+  const[editITId,setEditITId]=useState(null);
+  const[itTitle,setItTitle]=useState('');
+  const[itCon,setItCon]=useState('');
+  const[itDL,setItDL]=useState('');
+  const[itDLT,setItDLT]=useState('');
+  const[itUrg,setItUrg]=useState('');
+  const[showITDone,setShowITDone]=useState(false);
+
   const[showSchedDone,setShowSchedDone]=useState(false);
   const[toast,setToast]=useState('');
   const[glowId,setGlowId]=useState(null);
@@ -266,6 +280,7 @@ function App(){
       const d=await apiGet();
       setEvents((d.schedules||[]).map(s=>({id:s.id,name:s.name,dates:Array.isArray(s.dates)?s.dates:[],st:s.startTime||'',et:s.endTime||''})));
       setDuties((d.duties||[]).map(x=>({id:x.id,title:x.title,content:x.content||'',dl:x.deadline||'',dlt:x.deadlineTime||'',urgency:x.urgency||'',done:x.done===true||x.done==='true',dAt:x.doneAt||null})));
+      setIts((d.its||[]).map(x=>({id:x.id,title:x.title,content:x.content||'',dl:x.deadline||'',dlt:x.deadlineTime||'',urgency:x.urgency||'',done:x.done===true||x.done==='true',dAt:x.doneAt||null})));
       const recs=(d.records||[]).map(r=>({...r,files:Array.isArray(r.files)?r.files:[]}));
       setCols((d.colleagues||[]).map(c=>({id:c.id,name:c.name,records:recs.filter(r=>String(r.colleagueId)===String(c.id)).sort((a,b)=>((b.date||'')+(b.time||'')).localeCompare((a.date||'')+(a.time||'')))})));
       const items=(d.topicItems||[]).map(i=>({...i,files:Array.isArray(i.files)?i.files:[],sortOrder:Number(i.sortOrder)||0}));
@@ -302,11 +317,19 @@ function App(){
   const compEvs=useMemo(()=>{const now=new Date();now.setHours(0,0,0,0);return events.filter(ev=>{if(!ev.dates.length)return false;if(ev.dates.some(d=>d>=todayStr))return false;const last=[...ev.dates].sort().pop();return Math.round((now-pd(last))/864e5)>5;}).sort((a,b)=>{const la=[...a.dates].sort().pop()||'';const lb=[...b.dates].sort().pop()||'';return lb.localeCompare(la);});},[events,todayStr]);
   const schedSum=useMemo(()=>{const t=new Date();t.setHours(0,0,0,0);const ts=fmt(t);const tmr=new Date(t);tmr.setDate(tmr.getDate()+1);const ms=fmt(tmr);const we=new Date(t);we.setDate(we.getDate()+7);const ws=fmt(we);let tC=0,mC=0,wC=0;activeEvs.forEach(ev=>{if(ev.dates.includes(ts))tC++;if(ev.dates.includes(ms))mC++;if(ev.dates.some(d=>d>=ts&&d<=ws))wC++;});return{tC,mC,wC};},[activeEvs,tick]);
 
+  /* ── Duty computed ── */
   const actD=useMemo(()=>duties.filter(d=>!d.done).sort((a,b)=>gU(a.dl,a.dlt,a.urgency).p-gU(b.dl,b.dlt,b.urgency).p),[duties,tick]);
   const doneD=useMemo(()=>duties.filter(d=>d.done).sort((a,b)=>(b.dAt||'').localeCompare(a.dAt||'')),[duties]);
   const urgD=useMemo(()=>actD.filter(d=>gU(d.dl,d.dlt,d.urgency).p<=4),[actD]);
   const dlD=useMemo(()=>actD.filter(d=>d.dl),[actD]);
   const ltD=useMemo(()=>actD.filter(d=>!d.dl),[actD]);
+
+  /* ── IT computed ── */
+  const actIT=useMemo(()=>its.filter(d=>!d.done).sort((a,b)=>gU(a.dl,a.dlt,a.urgency).p-gU(b.dl,b.dlt,b.urgency).p),[its,tick]);
+  const doneIT=useMemo(()=>its.filter(d=>d.done).sort((a,b)=>(b.dAt||'').localeCompare(a.dAt||'')),[its]);
+  const urgIT=useMemo(()=>actIT.filter(d=>gU(d.dl,d.dlt,d.urgency).p<=4),[actIT]);
+  const dlIT=useMemo(()=>actIT.filter(d=>d.dl),[actIT]);
+  const ltIT=useMemo(()=>actIT.filter(d=>!d.dl),[actIT]);
 
   const toggleDate=useCallback(ds=>{setSel(p=>p.includes(ds)?p.filter(x=>x!==ds):[...p,ds].sort());},[]);
 
@@ -340,12 +363,7 @@ function App(){
       const oldId=editId;
       setEvents(p=>p.map(e=>e.id===oldId?{...e,name:nm,dates:ds,st,et}:e));
       resetF();sToast('已更新');
-      apiPost({action:'deleteSchedule',id:oldId}).then(()=>{
-        return apiPost({action:'addSchedule',name:nm,dates:ds,startTime:st,endTime:et});
-      }).then(res=>{
-        busy.current=false;
-        if(res?.id)setEvents(p=>p.map(e=>e.id===oldId?{...e,id:res.id}:e));
-      }).catch(()=>{busy.current=false;sToast('同步失敗');loadData();});
+      apiPost({action:'deleteSchedule',id:oldId}).then(()=>apiPost({action:'addSchedule',name:nm,dates:ds,startTime:st,endTime:et})).then(res=>{busy.current=false;if(res?.id)setEvents(p=>p.map(e=>e.id===oldId?{...e,id:res.id}:e));}).catch(()=>{busy.current=false;sToast('同步失敗');loadData();});
     }else{
       const tmpId='ts-'+Date.now();
       setEvents(p=>[...p,{id:tmpId,name:nm,dates:ds,st,et}]);
@@ -355,6 +373,7 @@ function App(){
   const resetF=()=>{setShowForm(false);setSel([]);setEName('');setSTime('');setETime('');setEditId(null);};
   const delEv=id=>{setEvents(p=>p.filter(e=>e.id!==id));vib();sToast('已刪除');apiPost({action:'deleteSchedule',id}).catch(()=>{sToast('刪除失敗');loadData();});};
 
+  /* ── Duty CRUD ── */
   const resetDF=()=>{setShowDF(false);setEditDId(null);setDTitle('');setDCon('');setDDL('');setDDLT('');setDUrg('');};
   const saveD=()=>{if(!dTitle.trim()||busy.current)return;busy.current=true;
     const ti=dTitle.trim(),co=dCon.trim(),dl=dDL,dlt=dDLT,urg=dUrg;
@@ -377,6 +396,30 @@ function App(){
       apiPost({action:'toggleDuty',id,done:false,doneAt:''}).catch(()=>{sToast('操作失敗');loadData();});}};
   const delD=id=>{setDuties(p=>p.filter(d=>d.id!==id));vib();sToast('已刪除');apiPost({action:'deleteDuty',id}).catch(()=>{sToast('刪除失敗');loadData();});};
 
+  /* ── IT CRUD ── */
+  const resetITF=()=>{setShowITF(false);setEditITId(null);setItTitle('');setItCon('');setItDL('');setItDLT('');setItUrg('');};
+  const saveIT=()=>{if(!itTitle.trim()||busy.current)return;busy.current=true;
+    const ti=itTitle.trim(),co=itCon.trim(),dl=itDL,dlt=itDLT,urg=itUrg;
+    if(editITId){
+      setIts(p=>p.map(d=>d.id===editITId?{...d,title:ti,content:co,dl,dlt,urgency:urg}:d));
+      resetITF();sToast('已更新');
+      apiPost({action:'updateIT',id:editITId,title:ti,content:co,deadline:dl,deadlineTime:dlt,urgency:urg}).then(()=>{busy.current=false;}).catch(()=>{busy.current=false;loadData();});
+    }else{
+      const tmpId='ti-'+Date.now();
+      setIts(p=>[...p,{id:tmpId,title:ti,content:co,dl,dlt,urgency:urg,done:false,dAt:null}]);
+      resetITF();sToast('已新增');
+      apiPost({action:'addIT',title:ti,content:co,deadline:dl,deadlineTime:dlt,urgency:urg}).then(res=>{busy.current=false;if(res?.id)setIts(p=>p.map(d=>d.id===tmpId?{...d,id:res.id}:d));}).catch(()=>{busy.current=false;loadData();});
+    }};
+  const editITFn=d=>{setEditITId(d.id);setItTitle(d.title);setItCon(d.content||'');setItDL(d.dl||'');setItDLT(d.dlt||'');setItUrg(d.urgency||'');setShowITF(true);setTimeout(()=>formRef.current?.scrollIntoView({behavior:'smooth',block:'start'}),150);};
+  const togIT=id=>{const d=its.find(x=>x.id===id);if(!d)return;
+    if(!d.done){if(glowId)return;vib([40,30,40]);setGlowId(id);sToast('已完成 ✓');
+      setTimeout(()=>{setIts(p=>p.map(x=>x.id===id?{...x,done:true,dAt:new Date().toISOString()}:x));setGlowId(null);setShowITDone(true);},700);
+      apiPost({action:'toggleIT',id,done:true,doneAt:new Date().toISOString()}).catch(()=>loadData());
+    }else{setIts(p=>p.map(x=>x.id===id?{...x,done:false,dAt:''}:x));vib();sToast('已恢復');
+      apiPost({action:'toggleIT',id,done:false,doneAt:''}).catch(()=>{sToast('操作失敗');loadData();});}};
+  const delIT=id=>{setIts(p=>p.filter(d=>d.id!==id));vib();sToast('已刪除');apiPost({action:'deleteIT',id}).catch(()=>{sToast('刪除失敗');loadData();});};
+
+  /* ── Colleague CRUD ── */
   const addColFn=()=>{if(!newCol.trim()||busy.current)return;busy.current=true;
     const nm=newCol.trim(),tmpId='tc-'+Date.now();
     setCols(p=>[...p,{id:tmpId,name:nm,records:[]}]);setNewCol('');setShowAddCol(false);sToast('已新增');
@@ -399,6 +442,7 @@ function App(){
     }};
   const delRec=(cId,rId)=>{setCols(p=>p.map(c=>c.id===cId?{...c,records:c.records.filter(r=>r.id!==rId)}:c));vib();sToast('已刪除');apiPost({action:'deleteRecord',id:rId}).catch(()=>{sToast('刪除失敗');loadData();});};
 
+  /* ── Topic CRUD ── */
   const addTopicFn=()=>{if(!newTopic.trim()||busy.current)return;busy.current=true;
     const nm=newTopic.trim(),tmpId='tt-'+Date.now();
     setTopics(p=>[...p,{id:tmpId,name:nm,items:[]}]);setNewTopic('');setShowAddTopic(false);setExpTopic(tmpId);sToast('已新增');
@@ -416,7 +460,7 @@ function App(){
       setAddItemTopic(null);setItemTitle('');setItemCon('');setItemFiles([]);setEditItem(null);sToast('已更新');
       apiPost({action:'updateTopicItem',id:editItem,title:ti,content:co,files:fls,sortOrder:old?old.sortOrder:0}).then(()=>{busy.current=false;}).catch(()=>{busy.current=false;loadData();});
     }else{
-      const tmpId='ti-'+Date.now(),ni={id:tmpId,topicId:tId,title:ti,content:co,files:fls,sortOrder:order};
+      const tmpId='tii-'+Date.now(),ni={id:tmpId,topicId:tId,title:ti,content:co,files:fls,sortOrder:order};
       setTopics(p=>p.map(t=>t.id===tId?{...t,items:[...t.items,ni]}:t));
       setAddItemTopic(null);setItemTitle('');setItemCon('');setItemFiles([]);setEditItem(null);sToast('已新增');
       apiPost({action:'addTopicItem',topicId:tId,title:ti,content:co,files:fls,sortOrder:order}).then(res=>{busy.current=false;if(res?.id)setTopics(p=>p.map(t=>({...t,items:t.items.map(i=>i.id===tmpId?{...i,id:res.id}:i)})));}).catch(()=>{busy.current=false;loadData();});
@@ -429,7 +473,13 @@ function App(){
     apiPost({action:'reorderTopicItems',items:reorder.map(i=>({id:i.id,sortOrder:i.sortOrder}))}).catch(()=>loadData());};
   const delItem=(tId,iId)=>{setTopics(p=>p.map(t=>t.id===tId?{...t,items:t.items.filter(i=>i.id!==iId)}:t));vib();sToast('已刪除');apiPost({action:'deleteTopicItem',id:iId}).catch(()=>{sToast('刪除失敗');loadData();});};
 
-  const VS=[{k:'schedule',l:'所有排期',ic:'cal'},{k:'duty',l:'Duty 日常',ic:'clipboard'},{k:'colleagues',l:'同事紀錄',ic:'users'},{k:'info',l:'公司需知',ic:'book'}];
+  const VS=[
+    {k:'schedule',l:'所有排期',ic:'cal'},
+    {k:'duty',l:'Duty 日常',ic:'clipboard'},
+    {k:'it',l:'IT支援',ic:'monitor'},
+    {k:'colleagues',l:'同事紀錄',ic:'users'},
+    {k:'info',l:'公司需知',ic:'book'}
+  ];
 
   const renderUploadArea=(files,setFiles,inputRef,accent='purple')=>(
     <div className="mb-3">
@@ -449,18 +499,19 @@ function App(){
     </div>
   );
 
-  const renderDutyItem=(d,i,arr)=>{
+  /* ── 通用 Task Item 渲染（Duty + IT 共用）── */
+  const renderTaskItem=(d,i,arr,onDel,onEdit,onTog)=>{
     const u=gU(d.dl,d.dlt,d.urgency);const isG=glowId===d.id;const isHold=holdingId===d.id;
-    return(<SwipeDel key={d.id} onDel={()=>delD(d.id)} bg="bg-gray-900">
+    return(<SwipeDel key={d.id} onDel={()=>onDel(d.id)} bg="bg-gray-900">
       <div
-        onTouchStart={()=>{if(!isG)lpStart(d.id,()=>editDFn(d));}}
+        onTouchStart={()=>{if(!isG)lpStart(d.id,()=>onEdit(d));}}
         onTouchMove={lpMove}
         onTouchEnd={lpEnd}
-        onMouseDown={()=>{if(!isG)lpStart(d.id,()=>editDFn(d));}}
+        onMouseDown={()=>{if(!isG)lpStart(d.id,()=>onEdit(d));}}
         onMouseUp={lpEnd}
         className={'px-4 py-3.5 transition-colors duration-300 no-sel '+(i<arr.length-1?'border-b border-gray-700/50 ':'')+(isG?'bg-green-900/20':isHold?'card-hold':'')}>
       <div className="flex items-start gap-3">
-        <button onClick={()=>togD(d.id)} disabled={!!glowId&&glowId!==d.id}
+        <button onClick={()=>onTog(d.id)} disabled={!!glowId&&glowId!==d.id}
           className={'mt-0.5 w-7 h-7 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all duration-300 '+(isG?'bg-green-500 border-green-500 green-glow':'border-gray-600')}
         >{isG&&<Ic name="check" className="w-4 h-4 text-white" sw={3}/>}</button>
         <div className="flex-1 min-w-0">
@@ -476,6 +527,69 @@ function App(){
         {!isG&&!isHold&&<div className={'w-2.5 h-2.5 rounded-full flex-shrink-0 mt-1.5 '+u.dot+(u.pu?' animate-pulse':'')}/>}
       </div>
     </div></SwipeDel>);
+  };
+
+  /* ── 通用 Urgency 面板（Duty + IT 共用）── */
+  const renderUrgPanel=(urgArr,onEdit,accentIcon)=>{
+    if(!urgArr.length)return null;
+    return(<div className="bg-gray-900 rounded-2xl border border-red-900/40 p-4 mb-5">
+      <div className="flex items-center gap-2 text-red-300 text-sm font-semibold mb-3"><Ic name="alert" className="w-4 h-4"/>⚡ 優先處理<span className="text-xs text-red-500 ml-auto">{urgArr.length}項</span></div>
+      <div className="space-y-2">{urgArr.map(d=>{const u=gU(d.dl,d.dlt,d.urgency);const isHold=holdingId===d.id;return<div key={d.id}
+        onTouchStart={()=>lpStart(d.id,()=>onEdit(d))} onTouchMove={lpMove} onTouchEnd={lpEnd}
+        onMouseDown={()=>lpStart(d.id,()=>onEdit(d))} onMouseUp={lpEnd}
+        className={'flex items-center gap-3 bg-gray-800 rounded-xl px-3 py-2.5 cursor-pointer no-sel'+(isHold?' card-hold':'')}>
+        <div className={'w-2.5 h-2.5 rounded-full flex-shrink-0 '+u.dot+(u.pu?' animate-pulse':'')}/><span className="text-sm flex-1 truncate">{d.title}</span>
+        {isHold?<span className="text-xs text-purple-400">修改中…</span>:<span className={'text-xs font-medium '+(u.p<=1?'text-red-400':'text-amber-400')}>{d.dl?rDL(d.dl,d.dlt):u.lb}</span>}
+      </div>;})}</div>
+    </div>);
+  };
+
+  /* ── 通用 Task Form（Duty + IT 共用）── */
+  const renderTaskForm=(opts)=>{
+    const{show,eId,title,setTitle,con,setCon,dl,setDl,dlt,setDlt,urg,setUrg,save,reset,label}=opts;
+    if(!show)return null;
+    return(<div ref={formRef} className="bg-gray-900 rounded-2xl p-4 mb-5 border border-gray-800">
+      <div className="flex items-center justify-between mb-4"><h2 className="font-semibold text-lg">{eId?'修改事項':'新增事項'}</h2><button onClick={reset}><Ic name="x" className="w-5 h-5 text-gray-500"/></button></div>
+      <input type="text" placeholder="要做咩？" value={title} onChange={e=>setTitle(e.target.value)} {...dp} className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 mb-3 text-white placeholder-gray-500 focus:outline-none focus:border-purple-500"/>
+      <textarea placeholder="備註（選填）" value={con} onChange={e=>setCon(e.target.value)} rows={2} className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 mb-3 text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 text-sm resize-none"/>
+      <div className="text-xs text-gray-400 mb-2 flex items-center gap-1"><Ic name="clock" className="w-3 h-3"/>Deadline（唔填=長線）</div>
+      <div className="grid grid-cols-2 gap-3 mb-4">
+        <DateBtn value={dl} onChange={setDl} onClear={()=>{setDl('');setDlt('');}}/>
+        <TimeBtn value={dlt} onChange={setDlt} onClear={()=>setDlt('')} disabled={!dl}/>
+      </div>
+      {dl&&<div className="bg-gray-800 rounded-xl px-3 py-2 mb-4 text-sm text-purple-200 flex items-center gap-2"><Ic name="cal" className="w-4 h-4 text-purple-400"/>{dd(dl)}{dlt&&` ${fT(dlt)}`}</div>}
+      {!dl&&<div className="bg-purple-900/20 rounded-xl px-3 py-2 mb-4 text-sm text-purple-300">📌 無deadline → 長線處理</div>}
+      <div className="text-xs text-gray-400 mb-2 flex items-center gap-1">⚡ 緊急度</div>
+      <div className="flex gap-2 mb-4 flex-wrap">
+        {URG_OPTS.map(o=><button key={o.k} type="button" onClick={()=>setUrg(o.k)}
+          className={'px-3 py-1.5 rounded-lg text-sm border transition-colors '+(urg===o.k?o.ac:'bg-gray-800 text-gray-400 border-gray-700')}>
+          {o.l}
+        </button>)}
+      </div>
+      <button onClick={save} disabled={!title.trim()} className="w-full py-3 rounded-xl font-semibold text-sm bg-purple-600 disabled:bg-gray-700 disabled:text-gray-500">{eId?'更新':'新增'}</button>
+    </div>);
+  };
+
+  /* ── 通用 Done 區塊（Duty + IT 共用）── */
+  const renderDoneSection=(doneArr,showSt,setShowSt,onDel,onTog)=>{
+    if(!doneArr.length)return null;
+    return(<div className="mt-6">
+      <button onClick={()=>setShowSt(!showSt)} className="flex items-center gap-2 mb-3 px-1 text-sm font-semibold text-gray-500 w-full no-sel">
+        <Ic name="check" className="w-4 h-4 text-green-600"/>已完成<span className="text-xs text-gray-600">{doneArr.length}</span><Ic name="down" className={'w-4 h-4 ml-auto transition-transform '+(showSt?'rotate-180':'')}/>
+      </button>
+      {showSt&&<div className="bg-gray-900 rounded-2xl border border-gray-800 overflow-hidden">{doneArr.map((d,i)=>(
+        <SwipeDel key={d.id} onDel={()=>onDel(d.id)} bg="bg-gray-900">
+          <div className={'px-4 py-3.5 opacity-50 '+(i<doneArr.length-1?'border-b border-gray-700/50':'')}>
+            <div className="flex items-start gap-3">
+              <button onClick={()=>onTog(d.id)} className="mt-0.5 w-7 h-7 rounded-full bg-green-500 border-2 border-green-500 flex items-center justify-center flex-shrink-0"><Ic name="check" className="w-4 h-4 text-white" sw={3}/></button>
+              <div className="flex-1 min-w-0">
+                <h3 className="font-semibold text-sm line-through text-gray-500">{d.title}</h3>
+                <p className="text-xs text-gray-600 mt-1">㩒圓圈恢復 ｜ ⬅️左拉刪除</p>
+              </div>
+            </div>
+          </div>
+        </SwipeDel>))}</div>}
+    </div>);
   };
 
   const renderSchedCard=(ev,isComp)=>{
@@ -524,7 +638,7 @@ function App(){
   if(loading)return(<div className="min-h-screen bg-gray-950 flex items-center justify-center">
     <div className="text-center"><div className="w-10 h-10 border-4 border-purple-500 border-t-transparent rounded-full spinner mx-auto mb-3"/><p className="text-gray-400 text-sm">載入中...</p></div>
   </div>);
-  if(loadErr&&!events.length&&!duties.length&&!cols.length&&!topics.length)return(<div className="min-h-screen bg-gray-950 flex items-center justify-center">
+  if(loadErr&&!events.length&&!duties.length&&!its.length&&!cols.length&&!topics.length)return(<div className="min-h-screen bg-gray-950 flex items-center justify-center">
     <div className="text-center"><Ic name="alert" className="w-12 h-12 text-red-400 mx-auto mb-3"/><p className="text-gray-400 mb-4">載入失敗</p>
     <button onClick={()=>{setLoading(true);loadData();}} className="bg-purple-600 text-white px-6 py-2.5 rounded-xl text-sm font-medium">重試</button></div>
   </div>);
@@ -550,8 +664,9 @@ function App(){
       <div className="flex items-center gap-2">
         <button onClick={()=>loadData(true)} className="p-2 text-gray-400 hover:text-white rounded-xl hover:bg-gray-900"><Ic name="refresh" className="w-5 h-5"/></button>
         {view==='schedule'&&!showForm&&<button onClick={()=>{setEditId(null);setShowForm(true);}} className="bg-purple-600 text-white px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-1"><Ic name="plus" className="w-4 h-4"/>新增</button>}
-        {view==='colleagues'&&<button onClick={()=>setShowAddCol(true)} className="bg-purple-600 text-white px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-1"><Ic name="userplus" className="w-4 h-4"/>新增</button>}
         {view==='duty'&&!showDF&&<button onClick={()=>{resetDF();setShowDF(true);}} className="bg-purple-600 text-white px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-1"><Ic name="plus" className="w-4 h-4"/>新增</button>}
+        {view==='it'&&!showITF&&<button onClick={()=>{resetITF();setShowITF(true);}} className="bg-purple-600 text-white px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-1"><Ic name="plus" className="w-4 h-4"/>新增</button>}
+        {view==='colleagues'&&<button onClick={()=>setShowAddCol(true)} className="bg-purple-600 text-white px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-1"><Ic name="userplus" className="w-4 h-4"/>新增</button>}
         {view==='info'&&<button onClick={()=>setShowAddTopic(true)} className="bg-purple-600 text-white px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-1"><Ic name="plus" className="w-4 h-4"/>新增</button>}
       </div>
     </div>
@@ -617,67 +732,38 @@ function App(){
       </div>}
     </div>}
 
-    {/* ═══ Duty ═══ */}
+    {/* ═══ Duty 日常 ═══ */}
     {view==='duty'&&<div>
-      {urgD.length>0&&!showDF&&<div className="bg-gray-900 rounded-2xl border border-red-900/40 p-4 mb-5">
-        <div className="flex items-center gap-2 text-red-300 text-sm font-semibold mb-3"><Ic name="alert" className="w-4 h-4"/>⚡ 優先處理<span className="text-xs text-red-500 ml-auto">{urgD.length}項</span></div>
-        <div className="space-y-2">{urgD.map(d=>{const u=gU(d.dl,d.dlt,d.urgency);const isHold=holdingId===d.id;return<div key={d.id}
-          onTouchStart={()=>lpStart(d.id,()=>editDFn(d))} onTouchMove={lpMove} onTouchEnd={lpEnd}
-          onMouseDown={()=>lpStart(d.id,()=>editDFn(d))} onMouseUp={lpEnd}
-          className={'flex items-center gap-3 bg-gray-800 rounded-xl px-3 py-2.5 cursor-pointer no-sel'+(isHold?' card-hold':'')}>
-          <div className={'w-2.5 h-2.5 rounded-full flex-shrink-0 '+u.dot+(u.pu?' animate-pulse':'')}/><span className="text-sm flex-1 truncate">{d.title}</span>
-          {isHold?<span className="text-xs text-purple-400">修改中…</span>:<span className={'text-xs font-medium '+(u.p<=1?'text-red-400':'text-amber-400')}>{d.dl?rDL(d.dl,d.dlt):u.lb}</span>}
-        </div>;})}</div>
-      </div>}
-      {showDF&&<div ref={formRef} className="bg-gray-900 rounded-2xl p-4 mb-5 border border-gray-800">
-        <div className="flex items-center justify-between mb-4"><h2 className="font-semibold text-lg">{editDId?'修改事項':'新增事項'}</h2><button onClick={resetDF}><Ic name="x" className="w-5 h-5 text-gray-500"/></button></div>
-        <input type="text" placeholder="要做咩？" value={dTitle} onChange={e=>setDTitle(e.target.value)} {...dp} className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 mb-3 text-white placeholder-gray-500 focus:outline-none focus:border-purple-500"/>
-        <textarea placeholder="備註（選填）" value={dCon} onChange={e=>setDCon(e.target.value)} rows={2} className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 mb-3 text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 text-sm resize-none"/>
-        <div className="text-xs text-gray-400 mb-2 flex items-center gap-1"><Ic name="clock" className="w-3 h-3"/>Deadline（唔填=長線）</div>
-        <div className="grid grid-cols-2 gap-3 mb-4">
-          <DateBtn value={dDL} onChange={setDDL} onClear={()=>{setDDL('');setDDLT('');}}/>
-          <TimeBtn value={dDLT} onChange={setDDLT} onClear={()=>setDDLT('')} disabled={!dDL}/>
-        </div>
-        {dDL&&<div className="bg-gray-800 rounded-xl px-3 py-2 mb-4 text-sm text-purple-200 flex items-center gap-2"><Ic name="cal" className="w-4 h-4 text-purple-400"/>{dd(dDL)}{dDLT&&` ${fT(dDLT)}`}</div>}
-        {!dDL&&<div className="bg-purple-900/20 rounded-xl px-3 py-2 mb-4 text-sm text-purple-300">📌 無deadline → 長線處理</div>}
-        <div className="text-xs text-gray-400 mb-2 flex items-center gap-1">⚡ 緊急度</div>
-        <div className="flex gap-2 mb-4 flex-wrap">
-          {URG_OPTS.map(o=><button key={o.k} type="button" onClick={()=>setDUrg(o.k)}
-            className={'px-3 py-1.5 rounded-lg text-sm border transition-colors '+(dUrg===o.k?o.ac:'bg-gray-800 text-gray-400 border-gray-700')}>
-            {o.l}
-          </button>)}
-        </div>
-        <button onClick={saveD} disabled={!dTitle.trim()} className="w-full py-3 rounded-xl font-semibold text-sm bg-purple-600 disabled:bg-gray-700 disabled:text-gray-500">{editDId?'更新':'新增'}</button>
-      </div>}
+      {!showDF&&renderUrgPanel(urgD,editDFn)}
+      {renderTaskForm({show:showDF,eId:editDId,title:dTitle,setTitle:setDTitle,con:dCon,setCon:setDCon,dl:dDL,setDl:setDDL,dlt:dDLT,setDlt:setDDLT,urg:dUrg,setUrg:setDUrg,save:saveD,reset:resetDF})}
       {actD.length===0&&!showDF&&doneD.length===0&&<div className="text-center text-gray-500 py-16"><Ic name="clipboard" className="w-12 h-12 mx-auto mb-3 opacity-30"/><p>未有事項</p></div>}
-
       {!showDF&&actD.length>0&&<div className="text-xs text-gray-500 bg-gray-900/50 rounded-xl px-3 py-2 mb-4 text-center no-sel">💡 長㩒0.7秒＝修改 ｜ ⬅️ 左拉＝刪除</div>}
-
       {dlD.length>0&&<div className="mb-5">
         <div className="flex items-center gap-2 mb-3 px-1"><Ic name="clock" className="w-4 h-4 text-purple-400"/><span className="text-sm font-semibold text-gray-300">有限期</span><span className="text-xs text-gray-600">{dlD.length}</span></div>
-        <div className="bg-gray-900 rounded-2xl border border-gray-800 overflow-hidden">{dlD.map((d,i)=>renderDutyItem(d,i,dlD))}</div>
+        <div className="bg-gray-900 rounded-2xl border border-gray-800 overflow-hidden">{dlD.map((d,i)=>renderTaskItem(d,i,dlD,delD,editDFn,togD))}</div>
       </div>}
       {ltD.length>0&&<div className="mb-5">
         <div className="flex items-center gap-2 mb-3 px-1"><span className="text-purple-400">📌</span><span className="text-sm font-semibold text-gray-300">長線</span><span className="text-xs text-gray-600">{ltD.length}</span></div>
-        <div className="bg-gray-900 rounded-2xl border border-gray-800 overflow-hidden">{ltD.map((d,i)=>renderDutyItem(d,i,ltD))}</div>
+        <div className="bg-gray-900 rounded-2xl border border-gray-800 overflow-hidden">{ltD.map((d,i)=>renderTaskItem(d,i,ltD,delD,editDFn,togD))}</div>
       </div>}
-      {doneD.length>0&&<div className="mt-6">
-        <button onClick={()=>setShowDone(!showDone)} className="flex items-center gap-2 mb-3 px-1 text-sm font-semibold text-gray-500 w-full no-sel">
-          <Ic name="check" className="w-4 h-4 text-green-600"/>已完成<span className="text-xs text-gray-600">{doneD.length}</span><Ic name="down" className={'w-4 h-4 ml-auto transition-transform '+(showDone?'rotate-180':'')}/>
-        </button>
-        {showDone&&<div className="bg-gray-900 rounded-2xl border border-gray-800 overflow-hidden">{doneD.map((d,i)=>(
-          <SwipeDel key={d.id} onDel={()=>delD(d.id)} bg="bg-gray-900">
-            <div className={'px-4 py-3.5 opacity-50 '+(i<doneD.length-1?'border-b border-gray-700/50':'')}>
-              <div className="flex items-start gap-3">
-                <button onClick={()=>togD(d.id)} className="mt-0.5 w-7 h-7 rounded-full bg-green-500 border-2 border-green-500 flex items-center justify-center flex-shrink-0"><Ic name="check" className="w-4 h-4 text-white" sw={3}/></button>
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-semibold text-sm line-through text-gray-500">{d.title}</h3>
-                  <p className="text-xs text-gray-600 mt-1">㩒圓圈恢復 ｜ ⬅️左拉刪除</p>
-                </div>
-              </div>
-            </div>
-          </SwipeDel>))}</div>}
+      {renderDoneSection(doneD,showDone,setShowDone,delD,togD)}
+    </div>}
+
+    {/* ═══ IT支援 ═══ */}
+    {view==='it'&&<div>
+      {!showITF&&renderUrgPanel(urgIT,editITFn)}
+      {renderTaskForm({show:showITF,eId:editITId,title:itTitle,setTitle:setItTitle,con:itCon,setCon:setItCon,dl:itDL,setDl:setItDL,dlt:itDLT,setDlt:setItDLT,urg:itUrg,setUrg:setItUrg,save:saveIT,reset:resetITF})}
+      {actIT.length===0&&!showITF&&doneIT.length===0&&<div className="text-center text-gray-500 py-16"><Ic name="monitor" className="w-12 h-12 mx-auto mb-3 opacity-30"/><p>未有 IT 支援事項</p></div>}
+      {!showITF&&actIT.length>0&&<div className="text-xs text-gray-500 bg-gray-900/50 rounded-xl px-3 py-2 mb-4 text-center no-sel">💡 長㩒0.7秒＝修改 ｜ ⬅️ 左拉＝刪除</div>}
+      {dlIT.length>0&&<div className="mb-5">
+        <div className="flex items-center gap-2 mb-3 px-1"><Ic name="clock" className="w-4 h-4 text-purple-400"/><span className="text-sm font-semibold text-gray-300">有限期</span><span className="text-xs text-gray-600">{dlIT.length}</span></div>
+        <div className="bg-gray-900 rounded-2xl border border-gray-800 overflow-hidden">{dlIT.map((d,i)=>renderTaskItem(d,i,dlIT,delIT,editITFn,togIT))}</div>
       </div>}
+      {ltIT.length>0&&<div className="mb-5">
+        <div className="flex items-center gap-2 mb-3 px-1"><span className="text-purple-400">📌</span><span className="text-sm font-semibold text-gray-300">長線</span><span className="text-xs text-gray-600">{ltIT.length}</span></div>
+        <div className="bg-gray-900 rounded-2xl border border-gray-800 overflow-hidden">{ltIT.map((d,i)=>renderTaskItem(d,i,ltIT,delIT,editITFn,togIT))}</div>
+      </div>}
+      {renderDoneSection(doneIT,showITDone,setShowITDone,delIT,togIT)}
     </div>}
 
     {/* ═══ 同事紀錄 ═══ */}
